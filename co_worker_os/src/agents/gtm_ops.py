@@ -8,6 +8,7 @@ claims it cannot trace to that scraped context.
 
 from __future__ import annotations
 
+from src.agents._common import append_feedback
 from src.core.config import model_for
 from src.core.ollama_client import ChatFn, default_chat_fn, parse_json_response
 from src.core.schemas import GTMSentiment, ProductConstraints
@@ -30,10 +31,12 @@ def run(
     constraints: ProductConstraints,
     chat_fn: ChatFn | None = None,
     scraped_context: str | None = None,
+    feedback: str | None = None,
 ) -> GTMSentiment:
     chat_fn = chat_fn or default_chat_fn(model_for("gtm_ops"))
     user_prompt = constraints.model_dump_json()
     if scraped_context:
         user_prompt = f"{user_prompt}\n\n--- SCRAPED RESEARCH CONTEXT ---\n{scraped_context}"
+    user_prompt = append_feedback(user_prompt, feedback)
     raw_output = chat_fn(SYSTEM_PROMPT, user_prompt)
     return parse_json_response(raw_output, GTMSentiment)

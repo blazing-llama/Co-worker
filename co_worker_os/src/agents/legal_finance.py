@@ -8,6 +8,7 @@ asserts compliance or drafts usable legal text.
 
 from __future__ import annotations
 
+from src.agents._common import append_feedback
 from src.core.config import model_for
 from src.core.ollama_client import ChatFn, default_chat_fn, parse_json_response
 from src.core.schemas import LegalFlags, ProductConstraints, Region
@@ -33,11 +34,11 @@ Return raw JSON only, no prose, no markdown fences.
 """
 
 
-def run(constraints: ProductConstraints, chat_fn: ChatFn | None = None) -> LegalFlags:
+def run(constraints: ProductConstraints, chat_fn: ChatFn | None = None, feedback: str | None = None) -> LegalFlags:
     chat_fn = chat_fn or default_chat_fn(model_for("legal_finance"))
     system_prompt = SYSTEM_PROMPT
     if constraints.region == Region.INDIA:
         system_prompt += "\nThis product's region is India — prioritize DPDP, GST, and IT Act flags.\n"
-    user_prompt = constraints.model_dump_json()
+    user_prompt = append_feedback(constraints.model_dump_json(), feedback)
     raw_output = chat_fn(system_prompt, user_prompt)
     return parse_json_response(raw_output, LegalFlags)

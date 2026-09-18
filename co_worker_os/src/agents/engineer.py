@@ -5,6 +5,7 @@ Consumes ONLY ProductConstraints, never the user's raw prompt.
 
 from __future__ import annotations
 
+from src.agents._common import append_feedback
 from src.core.config import model_for
 from src.core.ollama_client import ChatFn, default_chat_fn, parse_json_response
 from src.core.schemas import ProductConstraints, TechStackSpec
@@ -23,8 +24,8 @@ offline"). Return raw JSON only, no prose, no markdown fences.
 """
 
 
-def run(constraints: ProductConstraints, chat_fn: ChatFn | None = None) -> TechStackSpec:
+def run(constraints: ProductConstraints, chat_fn: ChatFn | None = None, feedback: str | None = None) -> TechStackSpec:
     chat_fn = chat_fn or default_chat_fn(model_for("engineer"))
-    user_prompt = constraints.model_dump_json()
+    user_prompt = append_feedback(constraints.model_dump_json(), feedback)
     raw_output = chat_fn(SYSTEM_PROMPT, user_prompt)
     return parse_json_response(raw_output, TechStackSpec)

@@ -12,7 +12,7 @@ explicitly note it as deferred in this doc first.
 | 1 | Security hooks + Pydantic schemas | ✅ Done |
 | 2 | Web/social/video scrapers + local search | ✅ Done |
 | 3 | Orchestrator hub + 5 parallel worker agents | ✅ Done |
-| 4 | 2-layer review gate + Strands Evals diagnostics | ⬜ Not started |
+| 4 | 2-layer review gate + Strands Evals diagnostics | ✅ Done |
 | 5 | Context compaction harness + CLI entry point | ⬜ Not started |
 
 ---
@@ -137,6 +137,44 @@ outputs from a single NL prompt, with Legal/Finance gated behind a checkpoint.
 
 **Exit criteria:** an intentionally malformed agent output is caught, repaired
 within 3 cycles or explicitly surfaced as failed — never silently passed through.
+
+**Result:** 19 new tests (82/82 total) pass.
+
+- `strands-agents-evals` **is real and installed cleanly** (v1.3.0, AWS-authored,
+  imports as `strands_evals`; confirmed via `pip install` + direct introspection
+  in this session, not assumed). Its actual API differs from the spec's flat
+  `Session`/`detect_failures` names: the real shape is
+  `strands_evals.types.trace.Session(traces=[Trace(spans=[AgentInvocationSpan(...)])])`
+  and `strands_evals.detectors.detect_failures(session, model=...)` /
+  `analyze_root_cause(session, failures=..., model=...)`, both requiring a
+  `model` for live LLM-judge diagnosis. `strands_harness.py` builds real
+  `Session`/`Trace`/`AgentInvocationSpan` objects (verified against the actual
+  installed classes, not a mock) and wraps `detect_failures`/`analyze_root_cause`
+  behind injectable `detect_fn`/`analyze_fn` so this sprint's tests don't require
+  a live model call. The local fallback path (used only if the package failed to
+  import) was also directly exercised in this session by forcing
+  `STRANDS_EVALS_AVAILABLE = False` and confirming it still builds a session and
+  detects a malformed response — both code paths are proven working, not just
+  the one that happened to install here. A live `strands-evals diagnose
+  --session session.json` run against real session data was NOT performed.
+- `evaluator.py`'s Layer 1 does the schema/coverage/budget checks (every FR-XXX
+  must have a covering TEST-XXX; a SharkTankVerdict's `tam_usd` below the
+  stated `budget_usd` is flagged); Layer 2 is a single local-model rubric judge,
+  not a full AG2 group-chat cross-review — that's the one plan item not built
+  this sprint (see note below).
+- `repair_loop.py`'s bound is enforced and tested from both failure modes: a
+  worker that keeps raising `MalformedAgentOutput` and a worker whose output
+  parses but never clears the rubric threshold both raise
+  `RepairLoopExhausted` at exactly `max_iterations=3`, carrying the last
+  attempt's output/report rather than swallowing the failure. A worker that
+  fails once and passes on retry is confirmed to receive the prior
+  `RepairHints.suggested_fix` as its `feedback` argument (all 5 agents' `run()`
+  now accept optional `feedback`).
+- **Deferred, not silently dropped:** the plan called for an AG2 group-chat
+  pattern (Co-Founder vs. PM vs. Engineer debate) inside the review gate.
+  `evaluator.py` implements the single-reviewer LLM rubric only; `ag2` stays in
+  `pyproject.toml` for a follow-up sprint if multi-agent cross-review is
+  needed. Flagging this explicitly rather than claiming full plan coverage.
 
 ## Sprint 5: Context compaction harness + CLI entry point
 
