@@ -88,7 +88,7 @@ export function RiskGauge({ risk }: RiskGaugeProps) {
               className="text-mono-tag rounded px-1.5 py-0.5 normal-case tracking-normal"
               style={{ color, backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)` }}
             >
-              {SEVERITY_TAG_LABEL[risk.severity]}
+              {SEVERITY_TAG_LABEL[risk.severity]} · {pct}%
             </span>
           </div>
         </Tooltip.Trigger>

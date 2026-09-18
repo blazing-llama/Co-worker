@@ -38,17 +38,26 @@ function deriveVerdictStatus(risks: ProductRisk[], verdictConfidence: Confidence
   return 'viable'
 }
 
+const USD_TO_INR_RATE = 83 // fixed illustrative rate for display only, not a live FX figure
+
+/**
+ * TAM/SAM are stored in USD by the backend regardless of region (see
+ * SharkTankVerdict.tam_usd/sam_usd in schemas.py) -- there is no separate
+ * region-denominated field to switch on. This is a pure display conversion,
+ * re-run every time `region` changes (driven by the TopBar's India-First/
+ * Global-Aware toggle, not the backend's parsed constraints.region -- see
+ * App.tsx), using standard Indian numbering (Lakh = 1e5, Crore = 1e7) below
+ * 🇮🇳, and K/M grouping for 🌐.
+ */
 function formatCurrency(usd: number, region: Region): string {
   if (region === 'india') {
-    // TAM/SAM are stored in USD by the backend regardless of region; convert
-    // to crores for an India-first display the way the design brief expects
-    // ("₹4,200 Cr"), using a fixed illustrative rate -- flagged inline since
-    // it's a display conversion, not a backend-sourced FX figure.
-    const inr = usd * 83 // approx USD->INR, display purposes only
-    const crores = inr / 1e7
-    return `₹${crores.toLocaleString('en-IN', { maximumFractionDigits: 1 })} Cr`
+    const inr = usd * USD_TO_INR_RATE
+    if (inr >= 1e7) return `₹${(inr / 1e7).toLocaleString('en-IN', { maximumFractionDigits: 1 })} Cr`
+    if (inr >= 1e5) return `₹${(inr / 1e5).toLocaleString('en-IN', { maximumFractionDigits: 1 })} L`
+    return `₹${inr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
   }
   if (usd >= 1e6) return `$${(usd / 1e6).toLocaleString('en-US', { maximumFractionDigits: 1 })}M`
+  if (usd >= 1e3) return `$${(usd / 1e3).toLocaleString('en-US', { maximumFractionDigits: 1 })}K`
   return `$${usd.toLocaleString('en-US')}`
 }
 

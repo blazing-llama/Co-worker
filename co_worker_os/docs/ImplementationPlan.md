@@ -312,6 +312,42 @@ work":**
 exists — all frontend verification across every phase has been
 build/type-check plus the screenshot method above.
 
+### Post-F4 refinement: currency formatting + risk-gauge percentages
+
+**Goal:** two data-heuristic refinements requested after F4 — proper ₹
+Lakh/Crore formatting (not just Crore) that tracks the TopBar's live toggle
+state, and explicit percentage labels on the 4 risk gauges.
+
+- `SharkTankHero.tsx`'s `formatCurrency`: now branches on real Indian
+  numbering — Crore (≥1e7 INR) same as before, but values below that now
+  show Lakh (≥1e5 INR) instead of always forcing Crore (a ₹50K idea's TAM
+  was previously rendered as "₹0.0 Cr", which is worse than showing nothing).
+  Global/USD side gained a matching K bucket below the existing M bucket for
+  the same reason.
+- **Real behavior fix, not just a formatting one:** `App.tsx` previously
+  passed `result.constraints.region` (the backend's parsed value, frozen at
+  run time) to `SharkTankHero`/`WorkspaceTabs`, falling back to the toggle
+  only if that was ever absent (it never was) — so the India-First/
+  Global-Aware toggle had **no visible effect** on an already-completed
+  run's currency display. Now the toggle's live `region` state is passed
+  directly, so switching it re-renders TAM/SAM/the Legal tab's primary
+  jurisdiction instantly, without re-running the pipeline.
+- `RiskGauge.tsx`: the tier tag now reads e.g. "HIGH · 85%" instead of just
+  "HIGH" — the percentage was already driving the gauge's visual fill (see
+  Phase F2's result notes) but wasn't shown as a number anywhere in the UI.
+
+**Verification actually performed:** `npx tsc -b` and `npm run build` both
+clean (118/118 backend tests unaffected — this was a frontend-only change).
+Rendered against mocked SSE responses via the real dev server and
+screenshotted: a small-TAM scenario (₹41.5 L / ₹6.6 L, confirming the new
+Lakh bucket), a large-TAM scenario (₹7,055 Cr / ₹373.5 Cr, confirming Crore
+still works — a regression check, not just a new-code check), and — the
+important one — clicking the India-First/Global-Aware toggle **after** a
+run had already completed and confirming the TAM/SAM figures reformat
+instantly ($50K / $8K ⇄ ₹41.5 L / ₹6.6 L) with no re-run, proving the fix
+actually changed behavior rather than just changing a fallback that was
+never reached.
+
 ---
 
 ## Sprint 1: Security, FailproofAI hooks, Pydantic schemas

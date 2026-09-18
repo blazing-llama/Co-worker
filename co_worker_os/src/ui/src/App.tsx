@@ -156,11 +156,13 @@ export default function App() {
           </div>
         )}
 
+        {/* region here is the TopBar toggle's live state, not
+            result.constraints.region (the backend's parsed value from the
+            prompt at run time) -- currency formatting and the Legal tab's
+            primary jurisdiction should track what the user has selected
+            right now, including after a run, not freeze at run time. */}
         {result?.outputs.cofounder && (
-          <SharkTankHero
-            verdict={result.outputs.cofounder as unknown as SharkTankVerdict}
-            region={(result.constraints.region as Region) ?? region}
-          />
+          <SharkTankHero verdict={result.outputs.cofounder as unknown as SharkTankVerdict} region={region} />
         )}
 
         {result?.outputs.product_manager && result.outputs.engineer && result.outputs.gtm_ops && result.outputs.legal_finance && (
@@ -169,7 +171,7 @@ export default function App() {
             eng={result.outputs.engineer as unknown as TechStackSpec}
             gtm={result.outputs.gtm_ops as unknown as GTMSentiment}
             legal={result.outputs.legal_finance as unknown as LegalFlags}
-            region={(result.constraints.region as Region) ?? region}
+            region={region}
           />
         )}
       </main>
