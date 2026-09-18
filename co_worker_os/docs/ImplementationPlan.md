@@ -348,6 +348,72 @@ instantly ($50K / $8K ⇄ ₹41.5 L / ₹6.6 L) with no re-run, proving the fix
 actually changed behavior rather than just changing a fallback that was
 never reached.
 
+### Frontend regression test suite (Vitest + React Testing Library)
+
+**Goal:** close the "no automated frontend test suite" gap noted in every
+prior frontend phase's result log — the earlier notes above are kept as an
+accurate record of what was true at the time they were written, not
+retroactively rewritten.
+
+- Installed `vitest`, `@vitest/ui`, `jsdom`, `@testing-library/react`,
+  `@testing-library/jest-dom`, `@testing-library/user-event`. Config lives in
+  a separate `vitest.config.ts` (not merged into `vite.config.ts`, which has
+  the dev-server proxy to the backend) so `vitest` never needs a running
+  backend or Ollama — every test mocks `src/api.ts` instead.
+  `tsconfig.app.json` gained `vitest/globals` and `@testing-library/jest-dom`
+  to its `types` array so `tsc -b` (used by `npm run build`) type-checks test
+  files cleanly too. `package.json` gained `test` (`vitest run`, one-shot,
+  what CI/this task means by "confirm all tests pass cleanly") and
+  `test:watch`.
+- `src/test/fixtures.ts`: one shared set of fixtures mirroring the real
+  Pydantic schemas (`SharkTankVerdict`, `PRDSpec`, `TechStackSpec`,
+  `GTMSentiment`, `LegalFlags`) via `src/types.ts`, so every test exercises
+  the same shape the backend actually returns rather than each test
+  inventing its own object.
+- **40 new tests across 4 files**, matching the 4 requested categories:
+  1. `TopBar.test.tsx` — rendering (brand, connection status, model chip,
+     token budget) and the dark/light theme toggle's icon + callback.
+  2. `WorkspaceTabs.test.tsx` — tab switching across the 4 departmental
+     tabs, including that only the active tab is `aria-selected`.
+  3. `SchemaPropMapping.test.tsx` — `SharkTankVerdict` → `SharkTankHero`
+     (all 4 risk categories mapped to their own gauge with correct
+     severity, derived Viable/Unviable status), `PRDSpec` → `PMTab`
+     (every FR-XXX id/description, user-flow ordering), `LegalFlags` →
+     `LegalTab` (the CA/CS/Lawyer banner appearing/disappearing on the real
+     boolean, region-based primary/secondary flag table swap).
+  4. `App.test.tsx` — empty state (input console visible, no result
+     sections, Ollama-disconnected banner shown/hidden correctly), loading
+     skeleton, error alert banner (appears on stream error, clears on the
+     next run), plus dark-mode styling (`document.documentElement.dataset
+     .theme` toggling and persisting to `localStorage`).
+
+**Two things worth being explicit about, not glossed over:**
+1. **"5 co-worker roles" vs. 4 tabs.** The product brief's 5 roles are
+   Co-Founder, PM, Engineer, GTM, Legal — but Co-Founder renders in the
+   Shark Tank Bento hero (Zone 3), never as a `WorkspaceTabs` tab (see
+   `docs/Architecture.md`). `WorkspaceTabs.test.tsx` covers the 4 tabs that
+   actually exist; Co-Founder's rendering is covered separately in
+   `SchemaPropMapping.test.tsx`'s `SharkTankHero` tests. Noted here rather
+   than fabricating a 5th tab that isn't in the UI.
+2. **No loading-skeleton component existed before this task.** `isRunning`
+   previously only showed a spinner label on the Run button — there was no
+   placeholder for the Bento/tabs area while a run was in flight. Added
+   `RunSkeleton.tsx` (pulsing placeholder cards, `data-testid="run-skeleton"`,
+   `role="status"`) and wired it into `App.tsx` (`isRunning && !result`)
+   specifically so "loading skeleton" tests would exercise something real
+   rather than being written against a UI state that didn't exist.
+
+**Verification actually performed:** two real bugs in the *tests themselves*
+were caught and fixed by actually running the suite, not by predicting
+results: a risk-gauge test assumed `SEVERITY_TAG_LABEL.medium` was
+`"Medium"` when the real component renders `"Med"`, and a Legal-tab region
+test used `getByText('India')` against text that's split across sibling DOM
+nodes (`{secondaryLabel} Flags`) — RTL correctly failed to find it as a
+single text node; fixed by querying the heading's accessible name instead.
+`npx tsc -b` and `npm run build` both clean afterward. `npm test` → 40/40
+pass. Backend suite unaffected: 118/118 Python tests still pass (confirmed,
+not assumed, since this was nominally a frontend-only change).
+
 ---
 
 ## Sprint 1: Security, FailproofAI hooks, Pydantic schemas

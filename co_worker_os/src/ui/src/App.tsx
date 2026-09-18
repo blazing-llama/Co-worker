@@ -3,6 +3,7 @@ import { TopBar } from '@/components/TopBar'
 import { InputConsole, type Category } from '@/components/InputConsole'
 import { SharkTankHero } from '@/components/SharkTankHero'
 import { WorkspaceTabs } from '@/components/WorkspaceTabs'
+import { RunSkeleton } from '@/components/RunSkeleton'
 import { DiagnosticDrawer, type RunStatus } from '@/components/DiagnosticDrawer'
 import {
   checkOllamaStatus,
@@ -161,6 +162,8 @@ export default function App() {
             prompt at run time) -- currency formatting and the Legal tab's
             primary jurisdiction should track what the user has selected
             right now, including after a run, not freeze at run time. */}
+        {isRunning && !result && <RunSkeleton />}
+
         {result?.outputs.cofounder && (
           <SharkTankHero verdict={result.outputs.cofounder as unknown as SharkTankVerdict} region={region} />
         )}
