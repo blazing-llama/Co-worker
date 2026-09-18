@@ -10,18 +10,24 @@ repair loop, context compaction) is exactly what runs here too.
 
 from __future__ import annotations
 
+import json
+import queue
+import threading
 import time
 import uuid
+from datetime import datetime
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from src.agents.orchestrator import LegalFinanceCheckpointBlocked
-from src.cli import run_pipeline
-from src.core.config import OLLAMA_BASE_URL, list_local_models, verify_model_routing
+from src.cli import PipelineResult, run_pipeline
+from src.core.config import HEAVY_MODEL, OLLAMA_BASE_URL, list_local_models, verify_model_routing
 from src.core.ollama_client import ModelUnavailableError
+from src.evals.strands_harness import AgentCallRecord, DiagnosisResult, build_session, diagnose
 from src.review.repair_loop import RepairLoopExhausted
 
 app = FastAPI(title="Co-Worker OS API", version="0.1.0")
@@ -53,6 +59,15 @@ class RunTeamRequest(BaseModel):
     region: Literal["india", "global"] | None = None
 
 
+class CallRecordOut(BaseModel):
+    agent_name: str
+    system_prompt: str
+    user_prompt: str
+    response: str
+    start_time: datetime
+    end_time: datetime
+
+
 class RunTeamResponse(BaseModel):
     run_id: str
     constraints: dict
@@ -60,11 +75,57 @@ class RunTeamResponse(BaseModel):
     reports: dict
     iterations: dict
     formatted_output: str
+    call_records: list[CallRecordOut] = []
 
 
 class ErrorResponse(BaseModel):
     error: str
     detail: str
+
+
+class DiagnoseRequest(BaseModel):
+    run_id: str
+    call_records: list[CallRecordOut]
+
+
+class DiagnoseResponse(BaseModel):
+    run_id: str
+    available: bool
+    failures: list[str] = []
+    root_causes: list[str] = []
+    error: str | None = None
+
+
+def _build_run_team_response(run_id: str, result: PipelineResult) -> RunTeamResponse:
+    return RunTeamResponse(
+        run_id=run_id,
+        constraints=result.constraints.model_dump(mode="json"),
+        outputs={name: output.model_dump(mode="json") for name, output in result.outputs.items()},
+        reports={name: report.model_dump(mode="json") for name, report in result.reports.items()},
+        iterations=result.iterations,
+        formatted_output=result.formatted_output,
+        call_records=[
+            CallRecordOut(
+                agent_name=r.agent_name,
+                system_prompt=r.system_prompt,
+                user_prompt=r.user_prompt,
+                response=r.response,
+                start_time=r.start_time,
+                end_time=r.end_time,
+            )
+            for r in result.call_records
+        ],
+    )
+
+
+def _region_prefixed_prompt(prompt: str, region: str | None) -> str:
+    # The frontend's India-First/Global toggle changes which legal/tax system
+    # prompt legal_finance.py uses (see Region enum). parse_constraints infers
+    # region from the prompt by default; an explicit UI toggle should win, so
+    # this nudges the prompt rather than silently ignoring the user's choice.
+    if region:
+        return f"[region: {region}] {prompt}"
+    return prompt
 
 
 @app.get("/api/ollama-status", response_model=OllamaStatusResponse)
@@ -87,15 +148,7 @@ def run_team(request: RunTeamRequest) -> RunTeamResponse:
     if Ollama or a routed model is unavailable, this returns a real error
     (502), not a fabricated success."""
     run_id = str(uuid.uuid4())
-
-    # region override: the frontend's India-First/Global toggle changes which
-    # legal/tax system prompt legal_finance.py uses (see Region enum).
-    # parse_constraints infers region from the prompt by default; an explicit
-    # UI toggle should win, so we nudge the prompt rather than silently
-    # ignoring the user's selection.
-    prompt = request.prompt
-    if request.region:
-        prompt = f"[region: {request.region}] {prompt}"
+    prompt = _region_prefixed_prompt(request.prompt, request.region)
 
     try:
         result = run_pipeline(prompt, checkpoint_fn=lambda constraints, lf_result: True)
@@ -110,13 +163,95 @@ def run_team(request: RunTeamRequest) -> RunTeamResponse:
     except LegalFinanceCheckpointBlocked as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    return RunTeamResponse(
-        run_id=run_id,
-        constraints=result.constraints.model_dump(mode="json"),
-        outputs={name: output.model_dump(mode="json") for name, output in result.outputs.items()},
-        reports={name: report.model_dump(mode="json") for name, report in result.reports.items()},
-        iterations=result.iterations,
-        formatted_output=result.formatted_output,
+    return _build_run_team_response(run_id, result)
+
+
+_STREAM_DONE = object()
+
+
+@app.get("/api/run-team/stream")
+def run_team_stream(prompt: str, category: str | None = None, region: Literal["india", "global"] | None = None):
+    """Server-Sent Events version of /api/run-team: emits a live event per
+    pipeline milestone (chat_call_start/end, agent_start/done, checkpoint_*,
+    run_done/run_error) as the real pipeline executes, ending with a "result"
+    event carrying the same payload /api/run-team returns synchronously.
+
+    The pipeline runs in a background thread (run_pipeline uses its own
+    ThreadPoolExecutor internally and would block the event loop if called
+    directly); events cross into the async generator via a thread-safe
+    queue.Queue, read through run_in_executor so the event loop is never
+    blocked waiting on it either.
+    """
+    run_id = str(uuid.uuid4())
+    full_prompt = _region_prefixed_prompt(prompt, region)
+    event_queue: queue.Queue = queue.Queue()
+
+    def on_event(event_type: str, data: dict) -> None:
+        event_queue.put((event_type, data))
+
+    def worker() -> None:
+        try:
+            result = run_pipeline(full_prompt, checkpoint_fn=lambda c, lf: True, on_event=on_event)
+        except ModelUnavailableError as exc:
+            event_queue.put(("run_error", {"reason": "model_unavailable", "detail": str(exc)}))
+        except RepairLoopExhausted as exc:
+            event_queue.put(("run_error", {"reason": "repair_loop_exhausted", "detail": str(exc)}))
+        except LegalFinanceCheckpointBlocked as exc:
+            event_queue.put(("run_error", {"reason": "checkpoint_blocked", "detail": str(exc)}))
+        except Exception as exc:  # last-resort: never let the stream hang on an unexpected error
+            event_queue.put(("run_error", {"reason": "unexpected", "detail": str(exc)}))
+        else:
+            response = _build_run_team_response(run_id, result)
+            event_queue.put(("result", json.loads(response.model_dump_json())))
+        finally:
+            event_queue.put((_STREAM_DONE, None))
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    def event_generator():
+        while True:
+            event_type, data = event_queue.get()
+            if event_type is _STREAM_DONE:
+                return
+            yield f"event: {event_type}\ndata: {json.dumps(data, default=str)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.post("/api/diagnose", response_model=DiagnoseResponse)
+def diagnose_run(request: DiagnoseRequest) -> DiagnoseResponse:
+    """Builds a real strands-evals Session from a completed run's call
+    records and runs failure detection + root-cause analysis. A deliberate,
+    separate action from the run itself (not automatic) since this is its
+    own LLM-judge call with its own cost/latency.
+
+    Never fabricates a diagnosis: if the real strands-evals detectors can't
+    run (e.g. no local model reachable), `available` is false and `error`
+    explains why -- the frontend must show that plainly, not a fake result.
+    """
+    records = [
+        AgentCallRecord(
+            agent_name=r.agent_name,
+            system_prompt=r.system_prompt,
+            user_prompt=r.user_prompt,
+            response=r.response,
+            start_time=r.start_time,
+            end_time=r.end_time,
+        )
+        for r in request.call_records
+    ]
+    session = build_session(request.run_id, records)
+
+    try:
+        result: DiagnosisResult = diagnose(session, model=HEAVY_MODEL)
+    except Exception as exc:
+        return DiagnoseResponse(run_id=request.run_id, available=False, error=str(exc))
+
+    return DiagnoseResponse(
+        run_id=request.run_id,
+        available=True,
+        failures=result.failures,
+        root_causes=result.root_causes,
     )
 
 

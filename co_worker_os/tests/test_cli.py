@@ -157,6 +157,99 @@ class TestRunPipeline:
                 review_chat_fn=make_rubric_chat_fn(0.1),  # always fails rubric
             )
 
+    def test_captures_call_records_for_every_real_chat_fn_call(self):
+        result = cli.run_pipeline(
+            "I want a local-first note app for founders.",
+            parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
+            chat_fns=make_worker_chat_fns(),
+            review_chat_fn=make_rubric_chat_fn(0.9),
+        )
+        agent_role_pairs = {(r.agent_name.split(":")[0], r.agent_name.split(":")[1]) for r in result.call_records}
+        # 1 orchestrator parse call + (1 generate + 1 review) per worker agent.
+        assert ("orchestrator", "parse") in agent_role_pairs
+        for name in orchestrator.WORKER_AGENT_NAMES:
+            assert (name, "generate") in agent_role_pairs
+            assert (name, "review") in agent_role_pairs
+        assert len(result.call_records) == 1 + 2 * len(orchestrator.WORKER_AGENT_NAMES)
+
+    def test_call_records_preserve_real_prompts_and_responses(self):
+        result = cli.run_pipeline(
+            "I want a local-first note app for founders.",
+            parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
+            chat_fns=make_worker_chat_fns(),
+            review_chat_fn=make_rubric_chat_fn(0.9),
+        )
+        cofounder_call = next(r for r in result.call_records if r.agent_name == "cofounder:generate")
+        assert cofounder_call.response == RAW_COFOUNDER
+        assert cofounder_call.start_time <= cofounder_call.end_time
+
+    def test_emits_events_in_expected_order_on_success(self):
+        events: list[tuple[str, dict]] = []
+        cli.run_pipeline(
+            "I want a local-first note app for founders.",
+            parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
+            chat_fns=make_worker_chat_fns(),
+            review_chat_fn=make_rubric_chat_fn(0.9),
+            on_event=lambda t, d: events.append((t, d)),
+        )
+        event_types = [t for t, _ in events]
+        assert event_types[0] == "run_start"
+        assert "parse_start" in event_types
+        assert "parse_done" in event_types
+        assert event_types[-1] == "run_done"
+        # Every agent that ran must report agent_start before agent_done.
+        for name in orchestrator.WORKER_AGENT_NAMES:
+            start_idx = event_types.index("agent_start")
+            done_events = [d for t, d in events if t == "agent_done" and d.get("agent") == name]
+            assert len(done_events) == 1
+            assert done_events[0]["passed"] is True
+            assert start_idx < event_types.index("agent_done")
+
+    def test_emits_agent_failed_event_when_repair_loop_exhausted(self):
+        from src.review.repair_loop import RepairLoopExhausted
+
+        events: list[tuple[str, dict]] = []
+        with pytest.raises(RepairLoopExhausted):
+            cli.run_pipeline(
+                "I want a local-first note app for founders.",
+                parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
+                chat_fns=make_worker_chat_fns(),
+                review_chat_fn=make_rubric_chat_fn(0.1),
+                on_event=lambda t, d: events.append((t, d)),
+            )
+        assert any(t == "agent_failed" for t, _ in events)
+
+    def test_emits_checkpoint_events_and_run_error_on_denial(self):
+        events: list[tuple[str, dict]] = []
+        with pytest.raises(orchestrator.LegalFinanceCheckpointBlocked):
+            cli.run_pipeline(
+                "I want a local-first note app for founders.",
+                parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
+                chat_fns=make_worker_chat_fns(),
+                review_chat_fn=make_rubric_chat_fn(0.9),
+                checkpoint_fn=lambda constraints, lf_result: False,
+                on_event=lambda t, d: events.append((t, d)),
+            )
+        event_types = [t for t, _ in events]
+        assert "checkpoint_pending" in event_types
+        assert ("checkpoint_result", {"agent": "legal_finance", "approved": False}) in [
+            (t, d) for t, d in events if t == "checkpoint_result"
+        ]
+        assert event_types[-1] == "run_error"
+
+    def test_a_broken_on_event_callback_never_breaks_the_pipeline(self):
+        def exploding_callback(event_type, data):
+            raise RuntimeError("consumer blew up")
+
+        result = cli.run_pipeline(
+            "I want a local-first note app for founders.",
+            parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
+            chat_fns=make_worker_chat_fns(),
+            review_chat_fn=make_rubric_chat_fn(0.9),
+            on_event=exploding_callback,
+        )
+        assert set(result.outputs.keys()) == set(orchestrator.WORKER_AGENT_NAMES)
+
 
 class TestFormatOutput:
     def test_format_output_is_plain_text_not_json_dump(self):

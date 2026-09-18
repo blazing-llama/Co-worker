@@ -1,9 +1,19 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { TopBar } from '@/components/TopBar'
 import { InputConsole, type Category } from '@/components/InputConsole'
 import { SharkTankHero } from '@/components/SharkTankHero'
 import { WorkspaceTabs } from '@/components/WorkspaceTabs'
-import { ApiError, checkOllamaStatus, runCoWorkerTeam, type OllamaStatus, type Region, type RunTeamResponse } from '@/api'
+import { DiagnosticDrawer, type RunStatus } from '@/components/DiagnosticDrawer'
+import {
+  checkOllamaStatus,
+  diagnoseRun,
+  streamRunTeam,
+  type DiagnoseResponse,
+  type OllamaStatus,
+  type Region,
+  type RunTeamResponse,
+  type StreamEvent,
+} from '@/api'
 import type { GTMSentiment, LegalFlags, PRDSpec, SharkTankVerdict, TechStackSpec } from '@/types'
 
 const THEME_STORAGE_KEY = 'co-worker-theme'
@@ -14,6 +24,15 @@ function getInitialTheme(): 'dark' | 'light' {
   const stored = localStorage.getItem(THEME_STORAGE_KEY)
   if (stored === 'dark' || stored === 'light') return stored
   return 'dark' // spec: dark ("Midnight Command Canvas") is the default
+}
+
+function latestRunStep(events: StreamEvent[]): string | null {
+  const last = events[events.length - 1]
+  if (!last) return null
+  if (last.type === 'agent_start') return `Dispatching ${last.data.agent}…`
+  if (last.type === 'agent_done') return `${last.data.agent} done…`
+  if (last.type === 'chat_call_start') return `${last.data.agent} thinking…`
+  return null
 }
 
 export default function App() {
@@ -30,6 +49,13 @@ export default function App() {
   const [isRunning, setIsRunning] = useState(false)
   const [result, setResult] = useState<RunTeamResponse | null>(null)
   const [runError, setRunError] = useState<string | null>(null)
+
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [runStatus, setRunStatus] = useState<RunStatus>('idle')
+  const [streamEvents, setStreamEvents] = useState<StreamEvent[]>([])
+  const [diagnosis, setDiagnosis] = useState<DiagnoseResponse | null>(null)
+  const [isDiagnosing, setIsDiagnosing] = useState(false)
+  const closeStreamRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -50,23 +76,52 @@ export default function App() {
     }
   }, [])
 
-  const handleRun = useCallback(async () => {
+  useEffect(() => () => closeStreamRef.current?.(), [])
+
+  const handleRun = useCallback(() => {
     if (!prompt.trim() || isRunning) return
+    closeStreamRef.current?.()
+
     setIsRunning(true)
+    setRunStatus('running')
     setRunError(null)
     setResult(null)
-    try {
-      const response = await runCoWorkerTeam({ prompt, category: category ?? undefined, region })
-      setResult(response)
-    } catch (err) {
-      setRunError(err instanceof ApiError ? err.message : 'Unexpected error running the Co-Worker team.')
-    } finally {
-      setIsRunning(false)
-    }
+    setStreamEvents([])
+    setDiagnosis(null)
+
+    closeStreamRef.current = streamRunTeam(
+      { prompt, category: category ?? undefined, region },
+      {
+        onEvent: (event) => setStreamEvents((prev) => [...prev, event]),
+        onResult: (response) => {
+          setResult(response)
+          setRunStatus('done')
+          setIsRunning(false)
+        },
+        onError: (message) => {
+          setRunError(message)
+          setRunStatus('error')
+          setIsRunning(false)
+        },
+      },
+    )
   }, [prompt, category, region, isRunning])
 
+  const handleRunDiagnostics = useCallback(async () => {
+    if (!result || isDiagnosing) return
+    setIsDiagnosing(true)
+    try {
+      const diagnosis = await diagnoseRun(result.run_id, result.call_records)
+      setDiagnosis(diagnosis)
+    } catch {
+      setDiagnosis({ run_id: result.run_id, available: false, failures: [], root_causes: [], error: 'Diagnose request failed.' })
+    } finally {
+      setIsDiagnosing(false)
+    }
+  }, [result, isDiagnosing])
+
   return (
-    <div className="min-h-screen bg-canvas font-body text-text-primary">
+    <div className="min-h-screen bg-canvas pb-10 font-body text-text-primary">
       <TopBar
         ollamaStatus={ollamaStatus}
         region={region}
@@ -85,7 +140,7 @@ export default function App() {
           onCategoryChange={setCategory}
           onRun={handleRun}
           isRunning={isRunning}
-          runStep={null}
+          runStep={latestRunStep(streamEvents)}
         />
 
         {!ollamaStatus.connected && (
@@ -117,20 +172,18 @@ export default function App() {
             region={(result.constraints.region as Region) ?? region}
           />
         )}
-
-        {/* Zone 5 (diagnostics drawer) lands in Phase F4. This raw preview
-            is a fallback only for whatever the tabs above didn't cover
-            (there shouldn't be anything -- kept in case a future agent is
-            added before its own tab exists). */}
-        {result && (
-          <details className="card-hairline col-span-12 rounded-[var(--radius-outer)] bg-surface p-4">
-            <summary className="cursor-pointer text-sm font-medium text-text-secondary">Raw run output (debug)</summary>
-            <pre className="mt-3 max-h-[500px] overflow-auto font-mono text-xs text-text-secondary">
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          </details>
-        )}
       </main>
+
+      <DiagnosticDrawer
+        isOpen={isDrawerOpen}
+        onToggle={() => setIsDrawerOpen((open) => !open)}
+        status={runStatus}
+        events={streamEvents}
+        canDiagnose={result != null}
+        isDiagnosing={isDiagnosing}
+        diagnosis={diagnosis}
+        onRunDiagnostics={handleRunDiagnostics}
+      />
     </div>
   )
 }

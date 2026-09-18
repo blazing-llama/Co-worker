@@ -27,7 +27,7 @@ folded into the sprint numbering.
 | F1 | Backend bridge (`src/server.py`) + design tokens, shell, TopBar, InputConsole | ✅ Done |
 | F2 | Shark Tank Bento hero (verdict banner + 4-axis risk gauges) | ✅ Done |
 | F3 | 4 departmental workspace tabs (PM / Engineering / GTM / Legal) | ✅ Done |
-| F4 | Diagnostics drawer (Strands Evals traces, SSE live log) | ⬜ Not started |
+| F4 | Diagnostics drawer (Strands Evals traces, SSE live log) | ✅ Done |
 
 **Product decision, applied after F3 (retroactively, not silently):** this is
 a desktop-only webapp, not a responsive site — it is not meant to be usable
@@ -224,6 +224,93 @@ as-is for this phase rather than adding a scroll-snap tab bar speculatively.
 
 **Not yet done:** Phase F4 (diagnostics drawer, Strands Evals traces, SSE
 live log) remains. Still no automated frontend test suite (Vitest/RTL).
+
+### Phase F4: Diagnostics drawer (Strands Evals traces + live SSE log)
+
+**Goal:** Zone 5 — a live event log during a run, repair-loop attempt
+counters, and Strands Evals failure/root-cause diagnosis, per user decision
+to build both with real backend work rather than a post-hoc-only drawer.
+
+**Backend (real new surface, not a mock):**
+- `src/cli.py`: `run_pipeline` gained an `on_event: Callable[[str, dict],
+  None] | None` parameter, called synchronously at every milestone
+  (`run_start`, `parse_start/done`, `chat_call_start/end`, `agent_start`,
+  `agent_done`/`agent_failed`, `checkpoint_pending/result`, `run_done`/
+  `run_error`). `_instrument_chat_fn` wraps every chat_fn used in a run
+  (parse, each worker's generation call, each rubric review call)
+  uniformly — real or test double alike — recording it as an
+  `AgentCallRecord` (reusing Sprint 4's `strands_harness.AgentCallRecord`
+  type) and emitting a `chat_call_start`/`chat_call_end` pair. A broken
+  `on_event` callback is caught and swallowed (`_emit`) so a dropped SSE
+  connection can never break the pipeline run itself. `PipelineResult`
+  gained `call_records: list[AgentCallRecord]`.
+- `src/server.py`: `GET /api/run-team/stream` (Server-Sent Events) runs the
+  real pipeline in a background thread (`run_pipeline` already uses its own
+  `ThreadPoolExecutor` internally and would block the event loop if called
+  directly), bridging `on_event` calls into the async generator via a
+  thread-safe `queue.Queue`, ending with a `result` event carrying the same
+  shape `/api/run-team` returns synchronously (now including
+  `call_records`). `POST /api/diagnose` is a **separate, deliberate**
+  endpoint (not automatic) that builds a real `strands_evals` `Session` from
+  submitted call records and runs `detect_failures`/`analyze_root_cause`
+  (Sprint 4's harness) — if that fails (e.g. no local model reachable), it
+  returns `available: false` with the real error, never a fabricated
+  diagnosis.
+
+**Frontend:**
+- `api.ts`: `streamRunTeam()` (native `EventSource` against the GET stream
+  endpoint, since `EventSource` doesn't support a POST body) and
+  `diagnoseRun()`.
+- `DiagnosticDrawer.tsx`: collapsed 40px bar (status badge: Idle/Running/
+  Done/Error) expanding to a 320px panel — live JetBrains Mono event log
+  (auto-scrolling), per-agent repair-loop attempt counts + rubric scores
+  (from real `agent_done` events), and a "Run Diagnostics" action. `Esc`
+  closes it, per the brief's accessibility requirement.
+- `App.tsx`'s `handleRun` now drives the stream instead of the single POST
+  call, feeding both the main dashboard (on the `result` event) and the
+  drawer's live log (on every event) from one run.
+
+**Data-honesty decision:** the brief asked for "token consumption rates."
+`src/core/ollama_client.py` never requests or parses token usage from
+Ollama's chat completion response, so a token count would be fabricated.
+The drawer shows real wall-clock **call durations** instead
+(`chat_call_end`'s `duration_ms`, measured server-side around the actual
+`chat_fn` call) — labeled "Model Call Durations," not token consumption.
+
+**Verification actually performed, at multiple layers, not just "should
+work":**
+1. **Transport-layer streaming, proven not just asserted:** booted a real
+   `uvicorn` server (not `TestClient`) with `run_pipeline` patched to a fake
+   that sleeps 0.5s between 4 `on_event` calls, then consumed
+   `/api/run-team/stream` with a real `httpx` streaming client from a
+   separate process and timestamped each event's arrival. Events arrived at
+   ~0.09s, 0.59s, 1.09s, 1.59s, 2.09s — proving the queue bridge delivers
+   incrementally in real time; a buffered-until-done implementation would
+   have shown all 5 events arriving together at ~2.1s.
+2. **Full browser, real backend, real Vite dev server, not just mocked
+   fetch:** booted the real FastAPI app (`run_pipeline` and `diagnose`
+   patched to realistic, deliberately slow fakes emitting a full 5-agent
+   event sequence with per-agent iteration counts and checkpoint events) and
+   the real Vite dev server together, then drove the actual browser via
+   Playwright: clicked Run, opened the drawer mid-run and screenshotted the
+   log filling in live with the Run button showing the real latest-event
+   step label ("cofounder thinking…"), waited for completion and
+   screenshotted the full event trace + correct per-agent iteration counts
+   (engineer's 2× repair attempt rendered correctly) + summed call
+   durations, clicked "Run Diagnostics" and screenshotted the real
+   `/api/diagnose` response rendering ("No failures detected."), then
+   pressed `Escape` and screenshotted the drawer correctly collapsing back
+   to the 40px bar. Repeated in light theme — contrast holds throughout.
+3. **19 new backend tests** (12 in `test_cli.py` for event ordering,
+   call-record capture, the broken-callback-never-breaks-the-pipeline case;
+   7 in `test_server.py` for SSE event/result shape, region-prefixing,
+   error-event mapping, and `/api/diagnose`'s success/unavailable paths) —
+   118/118 total backend tests pass. `npx tsc -b` and `npm run build` both
+   clean.
+
+**Not yet done:** no automated frontend test suite (Vitest/RTL) still
+exists — all frontend verification across every phase has been
+build/type-check plus the screenshot method above.
 
 ---
 
