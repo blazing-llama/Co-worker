@@ -31,16 +31,32 @@ export function TopBar({
 
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-4 border-b border-border-hairline bg-canvas/80 px-6 backdrop-blur-md">
-      {/* Left: brand */}
+      {/* Left: brand + a status dot that stays visible at every width (the
+          rest of the trust stack needs room and hides below md; this dot is
+          the one piece of "is Ollama up" signal mobile keeps). */}
       <div className="flex shrink-0 items-center gap-2.5">
         <span className="font-display text-lg font-bold tracking-tight text-text-primary">CO-WORKER</span>
-        <span className="text-mono-tag rounded-md border border-border-hairline px-1.5 py-0.5 text-text-muted">
+        <span className="text-mono-tag hidden rounded-md border border-border-hairline px-1.5 py-0.5 text-text-muted sm:inline">
           {APP_VERSION}
+        </span>
+        <span className="relative flex h-2 w-2 shrink-0 md:hidden" title={ollamaStatus.connected ? 'Connected' : 'Disconnected'}>
+          {ollamaStatus.connected && (
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-verdict-viable opacity-75" />
+          )}
+          <span
+            className={cn(
+              'relative inline-flex h-2 w-2 rounded-full',
+              ollamaStatus.connected ? 'bg-verdict-viable' : 'bg-verdict-unviable',
+            )}
+          />
         </span>
       </div>
 
-      {/* Center: trust stack */}
-      <div className="flex min-w-0 flex-1 items-center justify-center gap-4">
+      {/* Center: trust stack. Needs real horizontal room for the status
+          label + model chip + token bar to never collide, so it's hidden
+          below md rather than left to overflow (see the dot above for the
+          mobile-visible fallback). */}
+      <div className="hidden min-w-0 flex-1 items-center justify-center gap-4 md:flex">
         <div className="flex shrink-0 items-center gap-2" title={ollamaStatus.baseUrl}>
           <span className="relative flex h-2 w-2">
             {ollamaStatus.connected && (
@@ -62,7 +78,7 @@ export function TopBar({
           </span>
         )}
 
-        <div className="hidden min-w-32 flex-1 max-w-56 items-center gap-2 sm:flex">
+        <div className="hidden min-w-32 flex-1 max-w-56 items-center gap-2 lg:flex">
           <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface">
             <div
               className="h-full rounded-full bg-dept-pm transition-all duration-200"

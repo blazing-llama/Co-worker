@@ -25,7 +25,7 @@ folded into the sprint numbering.
 | Phase | Scope | Status |
 |---|---|---|
 | F1 | Backend bridge (`src/server.py`) + design tokens, shell, TopBar, InputConsole | ✅ Done |
-| F2 | Shark Tank Bento hero (verdict banner + 4-axis risk gauges) | ⬜ Not started |
+| F2 | Shark Tank Bento hero (verdict banner + 4-axis risk gauges) | ✅ Done |
 | F3 | 4 departmental workspace tabs (PM / Engineering / GTM / Legal) | ⬜ Not started |
 | F4 | Diagnostics drawer (Strands Evals traces, SSE live log) | ⬜ Not started |
 
@@ -94,6 +94,64 @@ wired into a visible backend prompt change beyond a string prefix (see
 `server.py`'s `run_team`), and no automated frontend test suite exists yet
 (only the manual/screenshot verification above plus the Python-side
 `test_server.py`).
+
+### Phase F2: Shark Tank Bento hero
+
+**Goal:** Zone 3 from the design brief — the verdict banner (7 cols) + 4-axis
+risk gauges (5 cols) — rendering real `cofounder` output from `/api/run-team`.
+
+- `types.ts`: hand-written TypeScript mirrors of `src/core/schemas.py`'s
+  `SharkTankVerdict`/`ProductRisk` (no shared codegen yet — keep in sync
+  manually if the Pydantic schema changes).
+- `SharkTankHero.tsx` + `RiskGauge.tsx` (`@radix-ui/react-tooltip` for
+  accessible hover justifications): verdict banner with status badge, unit
+  economics summary, TAM/SAM + defensibility metric cards; 2×2 grid of
+  circular risk gauges per category, each hoverable to show the model's own
+  `description` text as justification.
+- Wired into `App.tsx` in place of the raw JSON preview for `cofounder`
+  specifically; the other 4 agents' outputs stay in a collapsible raw-preview
+  `<details>` block until Phase F3 builds their tabs.
+
+**Two data-honesty decisions, made explicitly rather than fabricated:**
+1. **No backend "Viable/Pivot/Unviable" field exists** — `SharkTankVerdict`
+   only has `verdict_confidence` and 4 categorical risk severities (see
+   `schemas.py`). `deriveVerdictStatus()` computes a display status from risk
+   severities (2+ "high" → Unviable, 1 "high" or low confidence → Pivot,
+   otherwise Viable) — a presentational heuristic over real data, documented
+   inline in `SharkTankHero.tsx`, never presented as something the model
+   itself emitted.
+2. **No numeric risk percentage exists either** — severity is categorical
+   (`high`/`medium`/`low`) only. `RiskGauge.tsx`'s `SEVERITY_TO_GAUGE_PCT`
+   maps severity to a fixed display percentage (25/60/85) purely to drive the
+   radial gauge's fill; the real evidence shown to the user is the risk's
+   `description` text in the tooltip, not a fabricated confidence number.
+3. Similarly, TAM/SAM are stored in USD by the backend regardless of region;
+   `formatCurrency()` converts to INR crores for India-region display using a
+   fixed illustrative rate (₹83/USD) — a display conversion, commented as
+   such, not a backend-sourced FX figure.
+
+**Verification actually performed:** `npx tsc -b` and `npm run build` both
+clean. Rather than trust the code, the dev server was started, `/api/run-team`
+and `/api/ollama-status` were intercepted with realistic mocked payloads (2
+scenarios: an "Unviable" case with 2 high-severity risks and long text
+needing `line-clamp`, and a "Viable" case with global/USD formatting), and the
+result was screenshotted in dark, light, after a real risk-gauge hover
+(tooltip renders the correct real `description` text, positioned without
+clipping), and at a 390px mobile viewport.
+
+**Real bug caught by that mobile screenshot, not by inspection:** at 390px,
+`TopBar`'s center "trust stack" (status label + model chip + token bar) had
+no responsive handling beyond hiding the token bar — the status text and
+model chip overflowed and visually overlapped the region toggle, a direct
+"zero text overlap" violation. Fixed by hiding the full trust-stack cluster
+below `md` and showing a compact status-only dot next to the brand at all
+widths instead; re-screenshotted to confirm the fix (390px now renders
+cleanly) and re-verified the desktop layout was unaffected.
+
+**Not yet done:** Phase F3 (departmental tabs) and F4 (diagnostics drawer)
+remain; no automated frontend test suite exists yet (Vitest/RTL was not
+added this phase) — verification here is build/type-check plus the
+screenshot method above, not unit tests.
 
 ---
 
