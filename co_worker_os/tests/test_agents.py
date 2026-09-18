@@ -159,15 +159,30 @@ class TestOrchestratorDispatch:
             assert "local-first note-taking app" in user_prompt  # from constraints.idea_summary
             assert user_prompt != "I want a local-first note app for founders."  # never the raw NL prompt
 
-    def test_dispatch_runs_workers_concurrently_not_sequentially(self):
+    def test_dispatch_runs_workers_with_bounded_concurrency(self):
+        # Sprint 7: dispatch no longer fires all 5 workers at once (that
+        # thrashes VRAM on a single shared local model) -- it caps concurrent
+        # in-flight calls at config.MAX_CONCURRENT_AGENTS. This asserts both
+        # halves of that: at least 2 calls do overlap (not fully sequential),
+        # and at no point do more than MAX_CONCURRENT_AGENTS run together.
         import threading
         import time
 
-        barrier = threading.Barrier(5, timeout=2)
+        from src.core.config import MAX_CONCURRENT_AGENTS
+
+        lock = threading.Lock()
+        state = {"current": 0, "max_seen": 0, "overlapped": False}
 
         def make_blocking_chat_fn(raw_response: str):
             def _fake(system_prompt: str, user_prompt: str) -> str:
-                barrier.wait()  # every worker must reach this point together
+                with lock:
+                    state["current"] += 1
+                    state["max_seen"] = max(state["max_seen"], state["current"])
+                    if state["current"] > 1:
+                        state["overlapped"] = True
+                time.sleep(0.2)
+                with lock:
+                    state["current"] -= 1
                 return raw_response
 
             return _fake
@@ -185,7 +200,9 @@ class TestOrchestratorDispatch:
         elapsed = time.monotonic() - start
 
         assert len(results) == 5
-        assert elapsed < 1.5  # would hang/timeout at the barrier if run sequentially
+        assert state["overlapped"] is True  # not fully sequential
+        assert state["max_seen"] <= MAX_CONCURRENT_AGENTS  # never exceeds the bound
+        assert elapsed < 1.5  # 5 calls at concurrency 2, 0.2s each, would hang/timeout if serialized far beyond this
 
 
 class TestLegalFinanceCheckpoint:

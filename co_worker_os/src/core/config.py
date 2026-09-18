@@ -14,8 +14,22 @@ CODE_MODEL = os.environ.get("CO_WORKER_CODE_MODEL", "qwen2.5-coder:14b")
 # Lightweight JSON parsing / routing (Orchestrator's ProductConstraints extraction).
 FAST_MODEL = os.environ.get("CO_WORKER_FAST_MODEL", "llama3.2:3b")
 
+# Embeddings for the semantic memory cache (src/core/memory_cache.py). Local
+# only, via the same Ollama endpoint -- never a cloud embeddings API.
+EMBED_MODEL = os.environ.get("CO_WORKER_EMBED_MODEL", "nomic-embed-text")
+
 MAX_AGENT_LOOP_ITERATIONS = 5
 MAX_REPAIR_LOOP_ITERATIONS = 3
+
+# Sprint 7: worker agents used to dispatch fully in parallel (one thread per
+# agent), which thrashes VRAM on a single 32b model shared across all 5
+# concurrent calls. Bounded concurrency trades some wall-clock time for a
+# workload that actually fits in VRAM.
+MAX_CONCURRENT_AGENTS = int(os.environ.get("CO_WORKER_MAX_CONCURRENCY", "2"))
+
+# Semantic memory cache: minimum cosine similarity between a new prompt's
+# embedding and a cached prompt's embedding to treat it as a cache hit.
+CACHE_SIMILARITY_THRESHOLD = float(os.environ.get("CO_WORKER_CACHE_SIMILARITY_THRESHOLD", "0.85"))
 
 
 @dataclass(frozen=True)

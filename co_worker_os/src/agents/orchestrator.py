@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 from src.agents import cofounder, engineer, gtm_ops, legal_finance, product_manager
-from src.core.config import model_for
+from src.core.config import MAX_CONCURRENT_AGENTS, model_for
 from src.core.ollama_client import ChatFn, default_chat_fn, parse_json_response
 from src.core.schemas import ProductConstraints
 
@@ -95,8 +95,12 @@ def dispatch(
             return name, run_fn(constraints, chat_fn=chat_fn, scraped_context=scraped_context)
         return name, run_fn(constraints, chat_fn=chat_fn)
 
+    # Bounded concurrency (see src/core/config.py MAX_CONCURRENT_AGENTS): all 5
+    # workers still run without the caller waiting for them one at a time, but
+    # at most MAX_CONCURRENT_AGENTS local model calls are ever in flight at
+    # once, so they don't all fight over the same GPU's VRAM simultaneously.
     results: dict[str, object] = {}
-    with ThreadPoolExecutor(max_workers=len(WORKER_AGENT_NAMES)) as executor:
+    with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_AGENTS) as executor:
         futures = [executor.submit(_run_worker, name) for name in WORKER_AGENT_NAMES]
         for future in futures:
             name, result = future.result()
