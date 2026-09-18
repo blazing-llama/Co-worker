@@ -10,7 +10,7 @@ explicitly note it as deferred in this doc first.
 |---|---|---|
 | 0 | Scaffolding, docs, CLAUDE.md, pyproject.toml | ✅ Done |
 | 1 | Security hooks + Pydantic schemas | ✅ Done |
-| 2 | Web/social/video scrapers + local search | ⬜ Not started |
+| 2 | Web/social/video scrapers + local search | ✅ Done |
 | 3 | Orchestrator hub + 5 parallel worker agents | ⬜ Not started |
 | 4 | 2-layer review gate + Strands Evals diagnostics | ⬜ Not started |
 | 5 | Context compaction harness + CLI entry point | ⬜ Not started |
@@ -58,6 +58,18 @@ environments where the CLI is available.
 
 **Exit criteria:** each scraper returns clean markdown/text from a fixture input
 with no external API key required.
+
+**Result:** 10/10 new scraper tests pass (44/44 total). `crawl4ai`, `yt-dlp`,
+`beautifulsoup4`, `feedparser`, and `requests` all installed cleanly in this
+environment (confirmed via `pip install`), so `web_scraper.py` uses Crawl4AI as
+the primary path with the BeautifulSoup+requests fallback verified independently
+(`scrape_url(..., crawl4ai_available=False)`). `video_scraper.py` confirmed to
+pass `skip_download=True` to yt-dlp and to strip all WEBVTT cue/timestamp markup
+before returning transcript markdown. `social_scraper.py` confirmed against a
+Reddit Atom feed fixture with HTML-escaped entry content, verified stripped to
+plain text. All three modules take an injectable HTTP/downloader dependency, so
+the test suite runs fully offline — no live network call was made against a real
+Reddit/YouTube/web endpoint in this session.
 
 ## Sprint 3: Orchestrator hub + 5 parallel worker agents
 
