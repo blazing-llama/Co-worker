@@ -20,7 +20,7 @@ from typing import Callable
 
 from src.agents import orchestrator
 from src.core.context_manager import ContextManager
-from src.core.ollama_client import ChatFn, ModelUnavailableError
+from src.core.ollama_client import ChatFn, MalformedAgentOutput, ModelUnavailableError
 from src.core.schemas import ProductConstraints, ReviewReport
 from src.evals.strands_harness import AgentCallRecord
 from src.review import repair_loop
@@ -142,7 +142,33 @@ def run_pipeline(
         on_event,
         call_records,
     )
-    constraints = orchestrator.parse_constraints(raw_prompt, chat_fn=instrumented_parse_fn)
+
+    # Bounded retry, same pattern as the worker agents' repair loop: the
+    # parsing model (often a small/fast one, e.g. llama3.2:3b) can return
+    # JSON that's syntactically valid but missing required fields (nulls for
+    # target_persona/budget_usd/timeline_weeks instead of a sensible
+    # inference or the prompt's own "0 if unstated" instruction). One bad
+    # response used to kill the whole run; this gives it up to
+    # max_repair_iterations attempts with the validation error fed back.
+    parse_feedback: str | None = None
+    constraints: ProductConstraints | None = None
+    for attempt in range(1, max_repair_iterations + 1):
+        prompt_for_attempt = raw_prompt
+        if parse_feedback:
+            prompt_for_attempt = (
+                f"{raw_prompt}\n\n--- PREVIOUS ATTEMPT FAILED VALIDATION, FIX THIS ---\n{parse_feedback}"
+            )
+        try:
+            constraints = orchestrator.parse_constraints(prompt_for_attempt, chat_fn=instrumented_parse_fn)
+            break
+        except MalformedAgentOutput as exc:
+            parse_feedback = str(exc)
+            _emit(on_event, "parse_retry", attempt=attempt, error=parse_feedback)
+            if attempt == max_repair_iterations:
+                _emit(on_event, "run_error", reason="parse_failed", detail=parse_feedback)
+                raise
+
+    assert constraints is not None  # loop always either returns or raises
     context_manager.add_entry("constraints", constraints.model_dump_json())
     _emit(on_event, "parse_done", constraints=constraints.model_dump(mode="json"))
 

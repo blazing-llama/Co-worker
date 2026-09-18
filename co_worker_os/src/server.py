@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from src.agents.orchestrator import LegalFinanceCheckpointBlocked
 from src.cli import PipelineResult, run_pipeline
 from src.core.config import HEAVY_MODEL, OLLAMA_BASE_URL, list_local_models, verify_model_routing
-from src.core.ollama_client import ModelUnavailableError
+from src.core.ollama_client import MalformedAgentOutput, ModelUnavailableError
 from src.evals.strands_harness import AgentCallRecord, DiagnosisResult, build_session, diagnose
 from src.review.repair_loop import RepairLoopExhausted
 
@@ -154,6 +154,11 @@ def run_team(request: RunTeamRequest) -> RunTeamResponse:
         result = run_pipeline(prompt, checkpoint_fn=lambda constraints, lf_result: True)
     except ModelUnavailableError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except MalformedAgentOutput as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Could not parse a valid ProductConstraints from the prompt after retries: {exc}",
+        ) from exc
     except RepairLoopExhausted as exc:
         raise HTTPException(
             status_code=422,
@@ -194,6 +199,8 @@ def run_team_stream(prompt: str, category: str | None = None, region: Literal["i
             result = run_pipeline(full_prompt, checkpoint_fn=lambda c, lf: True, on_event=on_event)
         except ModelUnavailableError as exc:
             event_queue.put(("run_error", {"reason": "model_unavailable", "detail": str(exc)}))
+        except MalformedAgentOutput as exc:
+            event_queue.put(("run_error", {"reason": "parse_failed", "detail": str(exc)}))
         except RepairLoopExhausted as exc:
             event_queue.put(("run_error", {"reason": "repair_loop_exhausted", "detail": str(exc)}))
         except LegalFinanceCheckpointBlocked as exc:
