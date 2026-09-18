@@ -13,7 +13,7 @@ explicitly note it as deferred in this doc first.
 | 2 | Web/social/video scrapers + local search | ✅ Done |
 | 3 | Orchestrator hub + 5 parallel worker agents | ✅ Done |
 | 4 | 2-layer review gate + Strands Evals diagnostics | ✅ Done |
-| 5 | Context compaction harness + CLI entry point | ⬜ Not started |
+| 5 | Context compaction harness + CLI entry point | ✅ Done |
 
 ---
 
@@ -189,3 +189,43 @@ within 3 cycles or explicitly surfaced as failed — never silently passed throu
 
 **Exit criteria:** `co-worker "idea text"` runs end-to-end locally, output is all
 5 deliverables, review-gated, with zero cloud calls.
+
+**Result:** 16 new tests (98/98 total) pass.
+
+- `context_manager.py`: oldest entries are compacted (never the most recent)
+  once the running token estimate crosses `token_threshold`; verified total
+  token count actually drops after compaction, not just that entries are
+  marked summarized. `build_dispatch_reminder(agent_name)` both returns and
+  records a reminder restating the schema-first invariant, injected before
+  each worker call in `cli.run_pipeline`.
+- `src/cli.py` wires: raw prompt → `orchestrator.parse_constraints` →
+  concurrent, review-gated dispatch (`repair_loop.repair_until_passing` per
+  worker, bounded at 3 iterations each) → `format_output` → plain-text report.
+  The Legal/Finance checkpoint from Sprint 3 is preserved: `main()`'s default
+  `checkpoint_fn` prints the flags and requires an interactive `y` before
+  releasing them.
+- **Real bug caught and fixed before it shipped:** `repair_loop`'s single
+  `chat_fn` parameter feeds both the worker's generation call and the
+  reviewer's rubric-scoring call. Naively reusing one chat_fn for both in the
+  CLI would have fed a worker's raw JSON output to the rubric parser (which
+  expects `{"score": ..., "notes": ...}`) and broken review on every run. Fixed
+  by wrapping each worker's run function to always use its own fixed
+  `chat_fn` internally, so the `chat_fn` passed through `repair_until_passing`
+  is free to be the separate rubric judge's chat_fn.
+- **Packaging bug caught and fixed:** `failproofai` was listed as a *hard*
+  dependency in `pyproject.toml`, so `pip install -e .` failed outright in
+  this environment (confirmed) even though `guardrails.py` already had a
+  working local fallback for its policies. Moved it to an optional
+  `[project.optional-dependencies.failproofai]` extra; `pip install -e .`
+  and the new `co-worker` console script (`[project.scripts]`) both confirmed
+  working after the fix.
+- **Live run confirmed against real (absent) Ollama, not just mocks:**
+  `co-worker "a local note app"` was actually executed in this sandbox. It
+  correctly raised `ModelUnavailableError` (Ollama unreachable, as expected --
+  see README's "Ollama Availability" section) and `main()` now prints a clean
+  one-line error instead of a raw traceback -- this fix was verified by
+  re-running the same command before and after the change, not assumed.
+  A full success-path run against a live local model was NOT performed in
+  this environment; the pipeline's correctness there rests on the 98/98
+  passing tests with mocked chat functions plus this real
+  failure-path verification.

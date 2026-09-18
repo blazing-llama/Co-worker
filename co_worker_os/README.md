@@ -15,15 +15,22 @@ ollama pull llama3.2:3b
 
 # 2. Verify Ollama is serving locally
 curl http://localhost:11434/api/tags
+# or, from Python: from src.core.config import list_local_models, verify_model_routing
 
 # 3. Install Python dependencies
 pip install -e ".[dev]"
 
-# 4. Install local security hooks
-failproofai policies --install --cli claude   # falls back to local hooks if unavailable
+# 4. (Optional) install FailproofAI's local security hooks, if available in
+#    your environment -- NOT a hard dependency, see "Notes on External
+#    Dependencies" below. src/security/guardrails.py enforces the same
+#    policies locally either way.
+pip install -e ".[failproofai]" && failproofai policies --install --cli claude
 
 # 5. Run tests
 pytest
+
+# 6. Run the CLI against your local Ollama
+co-worker "A local-first note-taking app for solo founders"
 ```
 
 ## Project Structure
@@ -33,14 +40,31 @@ See `docs/Architecture.md` for the full hub-and-spoke design and
 
 ## Status
 
-Scaffolding phase (Phase 0) complete. See `docs/ImplementationPlan.md` for
-current sprint status.
+All 5 sprints complete. See `docs/ImplementationPlan.md` for the full,
+per-sprint result log (including what was verified live vs. mocked in this
+development environment, and any deliberate deviations from the original
+plan).
 
 ## Notes on External Dependencies
 
-`failproofai` and `strands-agents-evals` are external packages this project
-depends on for security hooks and eval diagnostics, respectively. If either
-fails to install in your environment, the corresponding module
-(`src/security/guardrails.py`, `src/evals/strands_harness.py`) falls back to
-an equivalent local implementation — no sprint is blocked by a missing
-third-party package.
+- **`strands-agents-evals`** installs cleanly via pip (confirmed in this
+  project's development environment) and is a hard dependency. Its real API
+  (`strands_evals.detectors.detect_failures`/`analyze_root_cause`,
+  `strands_evals.types.trace.Session`) differs from some naming used in early
+  planning docs; `src/evals/strands_harness.py` is built against the verified
+  real classes, with a local fallback if the package is ever unavailable.
+- **`failproofai`** is **not** installable via pip in this project's
+  development environment (`pip install failproofai` returned "No matching
+  distribution found"). It is an *optional* extra (`pip install
+  -e ".[failproofai]"`), not a hard dependency, so a plain `pip install -e .`
+  always succeeds. `src/security/guardrails.py` enforces the same policies
+  (destructive-command interception, secret sanitization) locally regardless
+  of whether the package is present — no sprint is blocked by its absence.
+
+## Ollama Availability
+
+This project was developed and tested in a sandbox without Ollama installed
+or reachable, so all local-model calls in the test suite are mocked/stubbed.
+Before a real run, verify your own local models are pulled and reachable
+(`ollama list`, or `src.core.config.verify_model_routing()`), and don't assume
+a model is available just because it's the default in `src/core/config.py`.

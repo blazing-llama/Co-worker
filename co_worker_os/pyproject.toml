@@ -29,10 +29,7 @@ dependencies = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
 
-    # --- Security / reliability (unverified 3rd-party; guarded by try/except) ---
-    "failproofai>=0.1",
-
-    # --- Evals / diagnostics (unverified 3rd-party; guarded by try/except) ---
+    # --- Evals / diagnostics (confirmed installable; imports as strands_evals) ---
     "strands-agents-evals>=0.1",
 ]
 
@@ -41,6 +38,18 @@ dev = [
     "ruff>=0.5",
     "mypy>=1.10",
 ]
+# failproofai is NOT installable via pip in this environment (confirmed:
+# `pip install failproofai` -> "No matching distribution found"). It is kept
+# as an opt-in extra rather than a hard dependency so `pip install -e .`
+# still succeeds everywhere; src/security/guardrails.py's local fallback
+# (check_command_allowed / sanitize_secrets) covers its policies either way
+# -- see docs/ImplementationPlan.md Sprint 1's result note.
+failproofai = [
+    "failproofai>=0.1",
+]
+
+[project.scripts]
+co-worker = "src.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
