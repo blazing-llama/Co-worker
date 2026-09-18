@@ -1,0 +1,54 @@
+[project]
+name = "co-worker-os"
+version = "0.1.0"
+description = "100% local, zero-subscription, multi-agent AI co-worker system running on Ollama."
+requires-python = ">=3.11"
+readme = "README.md"
+
+dependencies = [
+    # --- Core schema / config ---
+    "pydantic>=2.6",
+    "python-dotenv>=1.0",
+    "httpx>=0.27",
+
+    # --- LLM client (OpenAI-compatible endpoint against local Ollama) ---
+    "openai>=1.30",
+
+    # --- Orchestration ---
+    "langgraph>=0.2",
+    "ag2>=0.3",
+
+    # --- Scraping / research (all local, zero-cost) ---
+    "crawl4ai>=0.4",
+    "yt-dlp>=2024.8.6",
+    "beautifulsoup4>=4.12",
+    "duckduckgo-search>=6.2",
+    "feedparser>=6.0",  # Reddit RSS / forum feeds
+
+    # --- Testing ---
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+
+    # --- Security / reliability (unverified 3rd-party; guarded by try/except) ---
+    "failproofai>=0.1",
+
+    # --- Evals / diagnostics (unverified 3rd-party; guarded by try/except) ---
+    "strands-agents-evals>=0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
