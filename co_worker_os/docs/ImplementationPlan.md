@@ -9,7 +9,7 @@ explicitly note it as deferred in this doc first.
 | Sprint | Scope | Status |
 |---|---|---|
 | 0 | Scaffolding, docs, CLAUDE.md, pyproject.toml | ✅ Done |
-| 1 | Security hooks + Pydantic schemas | ⬜ Not started |
+| 1 | Security hooks + Pydantic schemas | ✅ Done |
 | 2 | Web/social/video scrapers + local search | ⬜ Not started |
 | 3 | Orchestrator hub + 5 parallel worker agents | ⬜ Not started |
 | 4 | 2-layer review gate + Strands Evals diagnostics | ⬜ Not started |
@@ -36,6 +36,14 @@ unstructured text with another agent.
 
 **Exit criteria:** `pytest tests/test_guardrails.py tests/test_schemas.py` green;
 a manual `rm -rf /` attempt in the repo is blocked.
+
+**Result:** 34/34 tests pass. `failproofai` is not available on PyPI in this
+environment (confirmed via `pip install failproofai` failure); the local fallback
+in `src/security/guardrails.py` (`check_command_allowed`) was verified to block
+`rm -rf`, `git push --force`, and `git push origin main`, while allowing a normal
+feature-branch push — meeting the exit criteria without the external package.
+`.failproofai/policies/co_worker.yaml` documents the intended policy config for
+environments where the CLI is available.
 
 ## Sprint 2: Web, social, video scrapers + local search
 

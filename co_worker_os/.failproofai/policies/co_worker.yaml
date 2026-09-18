@@ -1,0 +1,26 @@
+# FailproofAI local policy config for co_worker_os.
+# Installed via: failproofai policies --install --cli claude
+# If the failproofai CLI/package is unavailable in this environment, the
+# equivalent behavior is enforced locally by src/security/guardrails.py
+# (check_command_allowed, sanitize_secrets) instead — see CLAUDE.md.
+
+policies:
+  - name: sanitize-api-keys
+    enabled: true
+    description: Scrub secrets (API keys, tokens, passwords) from agent context before LLM ingestion.
+
+  - name: block-rm-rf
+    enabled: true
+    description: Intercept recursive-force delete commands before execution.
+
+  - name: block-force-push
+    enabled: true
+    description: Intercept `git push --force` / `git push -f`.
+
+  - name: block-push-master
+    enabled: true
+    description: Intercept direct pushes to main/master branches.
+
+circuit_breaker:
+  max_agent_loop_iterations: 5
+  duplicate_tool_call_detection: true
