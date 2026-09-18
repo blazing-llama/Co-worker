@@ -26,7 +26,7 @@ folded into the sprint numbering.
 |---|---|---|
 | F1 | Backend bridge (`src/server.py`) + design tokens, shell, TopBar, InputConsole | ✅ Done |
 | F2 | Shark Tank Bento hero (verdict banner + 4-axis risk gauges) | ✅ Done |
-| F3 | 4 departmental workspace tabs (PM / Engineering / GTM / Legal) | ⬜ Not started |
+| F3 | 4 departmental workspace tabs (PM / Engineering / GTM / Legal) | ✅ Done |
 | F4 | Diagnostics drawer (Strands Evals traces, SSE live log) | ⬜ Not started |
 
 ### Phase F1: Backend bridge + shell
@@ -152,6 +152,64 @@ cleanly) and re-verified the desktop layout was unaffected.
 remain; no automated frontend test suite exists yet (Vitest/RTL was not
 added this phase) — verification here is build/type-check plus the
 screenshot method above, not unit tests.
+
+### Phase F3: 4 departmental workspace tabs
+
+**Goal:** Zone 4 — PM / Engineering / GTM / Legal tabs, each rendering that
+agent's real output, replacing the raw-JSON `<details>` fallback.
+
+- `types.ts` extended with TS mirrors of `PRDSpec`, `TechStackSpec`,
+  `GTMSentiment`, `LegalFlags` and their nested models.
+- `WorkspaceTabs.tsx` (`@radix-ui/react-tabs`) + `tabs/{PM,Eng,GTM,Legal}Tab.tsx`
+  + a shared `components/ui/tags.tsx` (`ConfidenceTag`, `MonoIdTag`) reused
+  across all 4 tabs for a consistent visual language with Zone 3's risk gauges.
+- Wired into `App.tsx` in place of the multi-agent raw-JSON block; a single
+  "Raw run output (debug)" `<details>` remains as a fallback/escape hatch,
+  not the primary UI.
+
+**Several data-honesty decisions, made explicit rather than fabricated —**
+the design brief assumed richer backend data than `schemas.py` actually
+produces in three places:
+1. **PM tab:** no persona field exists (only `problem_statement` +
+   `user_flows`), so the left column shows those instead of the brief's
+   "interactive persona cards with pain points." The FR-XXX table has no
+   priority/effort-point fields either — shown as a plain ID+description
+   table, `mvp_features`/`post_mvp_features` as separate checklists, nothing
+   invented.
+2. **Engineering tab:** no diagram schema exists (`architecture_summary` is
+   free text), so no Mermaid/SVG diagram is rendered — text only, rather
+   than guessing a structure the agent never specified. The TEST-XXX table
+   is explicitly labeled "specs, not yet executed" — there's no pass/fail or
+   execution-time data because these tests were never actually run.
+3. **GTM tab:** no numeric sentiment score or CAC field exists — themes show
+   their real `confidence` tag and `source_url` (the actual grounding
+   requirement from `gtm_ops.py`'s system prompt) instead of a fabricated
+   sentiment percentage or CAC estimate.
+
+The Legal tab's compliance banner (`ca_cs_lawyer_required`) is the one part
+of the original brief that maps cleanly onto real backend data — implemented
+as specified, gated on the actual boolean, not a heuristic.
+
+**Verification actually performed:** `npx tsc -b` and `npm run build` both
+clean. Rendered with a full realistic 5-agent mock (all 4 non-cofounder
+outputs populated with representative data) via the running dev server,
+screenshotted per-tab in dark theme, the Legal tab again in light theme
+(warning-banner contrast), and the whole page at 390px mobile width.
+
+**Real bug caught by screenshot, not by inspection:** the Engineering tab's
+API contract rows showed the HTTP method twice ("POST POST /orders") because
+the method badge was rendered separately from the full contract string,
+which already started with the method. Fixed by splitting the contract into
+method + path and rendering only the path as body text; re-screenshotted to
+confirm.
+
+**Known, accepted limitation (not silently glossed over):** on the 390px
+mobile screenshot, the tab list wraps to 3 lines rather than scrolling
+horizontally — readable, no overlap or clipping, but not polished. Left
+as-is for this phase rather than adding a scroll-snap tab bar speculatively.
+
+**Not yet done:** Phase F4 (diagnostics drawer, Strands Evals traces, SSE
+live log) remains. Still no automated frontend test suite (Vitest/RTL).
 
 ---
 

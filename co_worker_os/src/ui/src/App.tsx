@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { TopBar } from '@/components/TopBar'
 import { InputConsole, type Category } from '@/components/InputConsole'
 import { SharkTankHero } from '@/components/SharkTankHero'
+import { WorkspaceTabs } from '@/components/WorkspaceTabs'
 import { ApiError, checkOllamaStatus, runCoWorkerTeam, type OllamaStatus, type Region, type RunTeamResponse } from '@/api'
-import type { SharkTankVerdict } from '@/types'
+import type { GTMSentiment, LegalFlags, PRDSpec, SharkTankVerdict, TechStackSpec } from '@/types'
 
 const THEME_STORAGE_KEY = 'co-worker-theme'
 const CONTEXT_TOKEN_BUDGET = 128_000
@@ -107,20 +108,25 @@ export default function App() {
           />
         )}
 
-        {/* Zone 4 (departmental tabs) and Zone 5 (diagnostics drawer) land in
-            later phases. This raw preview covers the other 4 agents' output
-            in the meantime, so nothing the backend returns is hidden. */}
+        {result?.outputs.product_manager && result.outputs.engineer && result.outputs.gtm_ops && result.outputs.legal_finance && (
+          <WorkspaceTabs
+            pm={result.outputs.product_manager as unknown as PRDSpec}
+            eng={result.outputs.engineer as unknown as TechStackSpec}
+            gtm={result.outputs.gtm_ops as unknown as GTMSentiment}
+            legal={result.outputs.legal_finance as unknown as LegalFlags}
+            region={(result.constraints.region as Region) ?? region}
+          />
+        )}
+
+        {/* Zone 5 (diagnostics drawer) lands in Phase F4. This raw preview
+            is a fallback only for whatever the tabs above didn't cover
+            (there shouldn't be anything -- kept in case a future agent is
+            added before its own tab exists). */}
         {result && (
           <details className="card-hairline col-span-12 rounded-[var(--radius-outer)] bg-surface p-4">
-            <summary className="cursor-pointer text-sm font-medium text-text-secondary">
-              Other agent outputs (raw preview — departmental tabs coming in Phase F3)
-            </summary>
+            <summary className="cursor-pointer text-sm font-medium text-text-secondary">Raw run output (debug)</summary>
             <pre className="mt-3 max-h-[500px] overflow-auto font-mono text-xs text-text-secondary">
-              {JSON.stringify(
-                { product_manager: result.outputs.product_manager, engineer: result.outputs.engineer, gtm_ops: result.outputs.gtm_ops, legal_finance: result.outputs.legal_finance },
-                null,
-                2,
-              )}
+              {JSON.stringify(result, null, 2)}
             </pre>
           </details>
         )}

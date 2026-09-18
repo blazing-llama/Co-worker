@@ -33,3 +33,68 @@ export interface SharkTankVerdict {
   risks: ProductRisk[]
   verdict_confidence: ConfidenceLevel
 }
+
+// --- Product Manager ---
+
+export interface UserFlowStep {
+  step_number: number
+  description: string
+}
+
+export interface FunctionalRequirement {
+  id: string // "FR-XXX"
+  description: string
+}
+
+export interface PRDSpec {
+  problem_statement: string
+  user_flows: UserFlowStep[]
+  requirements: FunctionalRequirement[]
+  mvp_features: string[]
+  post_mvp_features: string[]
+}
+
+// --- Engineering ---
+
+export interface TestSpec {
+  id: string // "TEST-XXX"
+  description: string
+  covers_requirement_id: string // "FR-XXX"
+}
+
+export interface TechStackSpec {
+  architecture_summary: string
+  data_model_summary: string
+  api_contracts: string[]
+  test_specs: TestSpec[]
+}
+
+// --- GTM & Research ---
+
+export interface MarketTheme {
+  theme: string
+  supporting_quote_or_stat: string
+  source_url: string
+  confidence: ConfidenceLevel
+}
+
+export interface GTMSentiment {
+  customer_feedback_themes: MarketTheme[]
+  market_trends: string[]
+  pricing_benchmarks_usd: Record<string, number>
+  channel_strategy: string
+}
+
+// --- Legal & Finance ---
+
+export interface LegalFlag {
+  category: string
+  description: string
+  confidence: ConfidenceLevel
+}
+
+export interface LegalFlags {
+  india_flags: LegalFlag[]
+  global_flags: LegalFlag[]
+  ca_cs_lawyer_required: boolean
+}
