@@ -65,7 +65,7 @@ export function SharkTankHero({ verdict, region }: SharkTankHeroProps) {
   return (
     <div className="col-span-12 grid grid-cols-12 gap-5">
       {/* Cell 1: verdict banner */}
-      <section className="card-hairline col-span-12 rounded-[var(--radius-outer)] bg-surface p-6 lg:col-span-7">
+      <section className="card-hairline col-span-7 rounded-[var(--radius-outer)] bg-surface p-6">
         <div
           className="mb-5 flex items-center gap-2 rounded-[var(--radius-inner)] px-3 py-2"
           style={{ backgroundColor: meta.glow, color: meta.color }}
@@ -82,14 +82,14 @@ export function SharkTankHero({ verdict, region }: SharkTankHeroProps) {
           <p className="line-clamp-4 text-sm leading-relaxed text-text-secondary">{verdict.unit_economics_summary}</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3">
           <MetricCard label="TAM / SAM" value={`${formatCurrency(verdict.tam_usd, region)} / ${formatCurrency(verdict.sam_usd, region)}`} />
           <MetricCard label="Defensibility / Moat" value={verdict.defensibility_notes} clamp />
         </div>
       </section>
 
       {/* Cell 2: 4-axis risk gauges */}
-      <section className="card-hairline col-span-12 rounded-[var(--radius-outer)] bg-surface p-6 lg:col-span-5">
+      <section className="card-hairline col-span-5 rounded-[var(--radius-outer)] bg-surface p-6">
         <h3 className="mb-4 text-sm font-semibold text-text-primary">Product Risk — 4 Axes</h3>
         <div className="grid grid-cols-2 gap-3">
           {orderedRisks.map((risk) => (

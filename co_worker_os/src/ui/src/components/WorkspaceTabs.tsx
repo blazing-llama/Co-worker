@@ -25,7 +25,7 @@ const TABS = [
 export function WorkspaceTabs({ pm, eng, gtm, legal, region }: WorkspaceTabsProps) {
   return (
     <Tabs.Root defaultValue="pm" className="col-span-12">
-      <Tabs.List className="mb-4 flex flex-wrap gap-1 rounded-[var(--radius-inner)] border border-border-hairline bg-surface p-1">
+      <Tabs.List className="mb-4 flex gap-1 rounded-[var(--radius-inner)] border border-border-hairline bg-surface p-1">
         {TABS.map(({ value, label, icon: Icon, color }) => (
           <Tabs.Trigger
             key={value}

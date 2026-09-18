@@ -17,7 +17,7 @@ interface PMTabProps {
 export function PMTab({ spec }: PMTabProps) {
   return (
     <div className="grid grid-cols-12 gap-5">
-      <section className="card-hairline col-span-12 rounded-[var(--radius-outer)] bg-surface p-5 lg:col-span-5">
+      <section className="card-hairline col-span-5 rounded-[var(--radius-outer)] bg-surface p-5">
         <h3 className="mb-3 text-sm font-semibold text-text-primary">Problem Statement</h3>
         <p className="mb-5 text-sm leading-relaxed text-text-secondary">{spec.problem_statement}</p>
 
@@ -38,7 +38,7 @@ export function PMTab({ spec }: PMTabProps) {
         </ol>
       </section>
 
-      <section className="card-hairline col-span-12 rounded-[var(--radius-outer)] bg-surface p-5 lg:col-span-7">
+      <section className="card-hairline col-span-7 rounded-[var(--radius-outer)] bg-surface p-5">
         <h3 className="mb-3 text-sm font-semibold text-text-primary">MVP Feature Backlog</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -61,7 +61,7 @@ export function PMTab({ spec }: PMTabProps) {
           </table>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="mt-5 grid grid-cols-2 gap-4">
           <FeatureList title="MVP" icon={CheckCircle2} items={spec.mvp_features} color={DEPT_COLOR} />
           <FeatureList title="Post-MVP" icon={Circle} items={spec.post_mvp_features} color="var(--text-muted)" muted />
         </div>

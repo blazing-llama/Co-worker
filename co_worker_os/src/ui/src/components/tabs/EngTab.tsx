@@ -27,7 +27,7 @@ interface EngTabProps {
 export function EngTab({ spec }: EngTabProps) {
   return (
     <div className="grid grid-cols-12 gap-5">
-      <section className="card-hairline col-span-12 rounded-[var(--radius-outer)] bg-surface p-5 lg:col-span-6">
+      <section className="card-hairline col-span-6 rounded-[var(--radius-outer)] bg-surface p-5">
         <h3 className="mb-3 text-sm font-semibold text-text-primary">Architecture Summary</h3>
         <p className="mb-5 text-sm leading-relaxed text-text-secondary">{spec.architecture_summary}</p>
 
@@ -35,7 +35,7 @@ export function EngTab({ spec }: EngTabProps) {
         <p className="text-sm leading-relaxed text-text-secondary">{spec.data_model_summary}</p>
       </section>
 
-      <section className="card-hairline col-span-12 flex flex-col gap-5 rounded-[var(--radius-outer)] bg-surface p-5 lg:col-span-6">
+      <section className="card-hairline col-span-6 flex flex-col gap-5 rounded-[var(--radius-outer)] bg-surface p-5">
         <div>
           <h3 className="mb-3 text-sm font-semibold text-text-primary">API Contracts</h3>
           <div className="space-y-1.5">

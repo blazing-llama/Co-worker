@@ -57,8 +57,8 @@ export function InputConsole({
         className="min-h-[100px] w-full resize-none border-0 bg-transparent text-base leading-relaxed text-text-primary placeholder:text-text-muted focus:outline-none"
       />
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border-hairline pt-4">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border-hairline pt-4">
+        <div className="flex items-center gap-2">
           {CATEGORIES.map((c) => (
             <button
               key={c}

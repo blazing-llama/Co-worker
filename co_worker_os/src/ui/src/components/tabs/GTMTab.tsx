@@ -18,9 +18,9 @@ interface GTMTabProps {
 export function GTMTab({ sentiment }: GTMTabProps) {
   return (
     <div className="grid grid-cols-12 gap-5">
-      <section className="card-hairline col-span-12 rounded-[var(--radius-outer)] bg-surface p-5 lg:col-span-7">
+      <section className="card-hairline col-span-7 rounded-[var(--radius-outer)] bg-surface p-5">
         <h3 className="mb-3 text-sm font-semibold text-text-primary">Scraped Market Sentiment</h3>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3">
           {sentiment.customer_feedback_themes.map((theme, i) => (
             <div key={i} className="rounded-[var(--radius-inner)] border border-border-hairline bg-canvas/40 p-3">
               <div className="mb-1.5 flex items-start justify-between gap-2">
@@ -39,7 +39,7 @@ export function GTMTab({ sentiment }: GTMTabProps) {
             </div>
           ))}
           {sentiment.customer_feedback_themes.length === 0 && (
-            <p className="text-sm text-text-muted sm:col-span-2">No scraped feedback themes returned.</p>
+            <p className="text-sm text-text-muted col-span-2">No scraped feedback themes returned.</p>
           )}
         </div>
 
@@ -59,7 +59,7 @@ export function GTMTab({ sentiment }: GTMTabProps) {
         </div>
       </section>
 
-      <section className="col-span-12 flex flex-col gap-5 lg:col-span-5">
+      <section className="col-span-5 flex flex-col gap-5">
         <div className="card-hairline rounded-[var(--radius-outer)] bg-surface p-5">
           <h3 className="mb-3 text-sm font-semibold text-text-primary">Competitor Price Benchmarking</h3>
           <table className="w-full text-left text-sm">

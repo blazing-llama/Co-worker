@@ -42,7 +42,7 @@ export function LegalTab({ flags, region }: LegalTabProps) {
         </div>
       )}
 
-      <section className="card-hairline col-span-12 rounded-[var(--radius-outer)] bg-surface p-5 lg:col-span-7">
+      <section className="card-hairline col-span-7 rounded-[var(--radius-outer)] bg-surface p-5">
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
           <ScaleIcon className="h-4 w-4 shrink-0" style={{ color: 'var(--dept-legal)' }} />
           {primaryLabel} Flags
@@ -50,7 +50,7 @@ export function LegalTab({ flags, region }: LegalTabProps) {
         <FlagTable flagList={primaryFlags} />
       </section>
 
-      <section className="card-hairline col-span-12 rounded-[var(--radius-outer)] bg-surface p-5 lg:col-span-5">
+      <section className="card-hairline col-span-5 rounded-[var(--radius-outer)] bg-surface p-5">
         <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
           <ShieldAlert className="h-4 w-4 shrink-0 text-text-muted" />
           {secondaryLabel} Flags

@@ -29,6 +29,20 @@ folded into the sprint numbering.
 | F3 | 4 departmental workspace tabs (PM / Engineering / GTM / Legal) | ✅ Done |
 | F4 | Diagnostics drawer (Strands Evals traces, SSE live log) | ⬜ Not started |
 
+**Product decision, applied after F3 (retroactively, not silently):** this is
+a desktop-only webapp, not a responsive site — it is not meant to be usable
+on a phone at all. The F2/F3 result notes below describe mobile-viewport
+screenshots and responsive (`sm:`/`md:`/`lg:`) breakpoint classes that were
+built and verified at the time (including a real overlapping-text bug the
+mobile screenshot caught); all of that responsive handling was subsequently
+removed — `TopBar`'s trust stack is always fully visible, every Bento/tab
+grid uses fixed desktop column spans instead of `col-span-12 lg:col-span-N`
+stacking, and wrapping was removed from the tab bar and category chips.
+Kept the original result notes below as an accurate record of what was built
+and tested in each phase, rather than rewriting history — but the mobile
+verification they describe no longer reflects the current, desktop-only
+component code.
+
 ### Phase F1: Backend bridge + shell
 
 **Goal:** A real (not mocked) HTTP path from the browser to the local Ollama
