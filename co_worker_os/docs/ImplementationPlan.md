@@ -11,7 +11,7 @@ explicitly note it as deferred in this doc first.
 | 0 | Scaffolding, docs, CLAUDE.md, pyproject.toml | ✅ Done |
 | 1 | Security hooks + Pydantic schemas | ✅ Done |
 | 2 | Web/social/video scrapers + local search | ✅ Done |
-| 3 | Orchestrator hub + 5 parallel worker agents | ⬜ Not started |
+| 3 | Orchestrator hub + 5 parallel worker agents | ✅ Done |
 | 4 | 2-layer review gate + Strands Evals diagnostics | ⬜ Not started |
 | 5 | Context compaction harness + CLI entry point | ⬜ Not started |
 
@@ -89,6 +89,38 @@ agent outputs.
 
 **Exit criteria:** one orchestrator run produces 5 valid, schema-conformant JSON
 outputs from a single NL prompt, with Legal/Finance gated behind a checkpoint.
+
+**Result:** 19 new tests (63/63 total) pass.
+
+- **Ollama check (fact, not assumption):** `ollama` is not installed and
+  `localhost:11434` refused the connection in this remote sandbox container —
+  expected, since this container is not the user's local machine. Live model
+  availability (`qwen2.5:32b` / `qwen2.5-coder:14b` / `llama3.2:3b`) was NOT
+  verified this session. `src/core/config.py` now exposes
+  `list_local_models()` / `verify_model_routing()` so a real local run can
+  check this itself before dispatching; both are tested against injected fakes.
+  Run `ollama list` (or these functions) before a live run and stop if a routed
+  model is missing — do not assume it will silently work.
+- `src/core/ollama_client.py` wraps the OpenAI-compatible client against the
+  local endpoint; `openai.APIConnectionError` was verified (against no live
+  server) to raise `ModelUnavailableError` rather than an unhandled exception.
+- All 5 worker agents (`cofounder`, `product_manager`, `engineer`, `gtm_ops`,
+  `legal_finance`) consume only `ProductConstraints` — verified per-agent
+  (prompt never contains the raw NL string) and via `orchestrator.dispatch`.
+- Concurrency verified with a 5-party `threading.Barrier`: dispatch would hang/
+  timeout if workers ran sequentially; it completes in well under the timeout.
+- **Deviation from the original plan, applied deliberately:** the plan named
+  LangGraph's `.parallel()`/`interrupt_before` for dispatch and the
+  human-in-the-loop checkpoint. This implementation uses a plain
+  `ThreadPoolExecutor` for dispatch (LangGraph adds no behavior a thread pool
+  doesn't already give here, and keeps this sprint dependency-light) and a
+  `checkpoint_fn(constraints, legal_finance_result) -> bool` callback for the
+  gate: all 5 agents run concurrently, but `legal_finance`'s result is withheld
+  from the returned dict (raising `LegalFinanceCheckpointBlocked`) unless the
+  checkpoint approves — functionally equivalent to `interrupt_before` gating a
+  node's output, tested in both the approve and deny paths. `langgraph` remains
+  in `pyproject.toml` for a future sprint if a real multi-step graph is needed;
+  it was not required for this one.
 
 ## Sprint 4: 2-layer review gate + Strands Evals diagnostics
 

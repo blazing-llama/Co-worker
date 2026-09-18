@@ -54,3 +54,32 @@ def model_for(task: str) -> str:
     to a default model — routing must be explicit.
     """
     return AGENT_MODEL_ROUTES[task].model
+
+
+def list_local_models(http_get=None, base_url: str | None = None) -> list[str]:
+    """Query the local Ollama daemon's /api/tags for pulled model names.
+
+    Returns an empty list (never raises) if Ollama isn't reachable — callers
+    decide whether that's fatal. `http_get` is injectable for testing.
+    """
+    import requests
+
+    http_get = http_get or requests.get
+    tags_url = (base_url or OLLAMA_BASE_URL).replace("/v1", "") + "/api/tags"
+    try:
+        response = http_get(tags_url, timeout=5)
+        response.raise_for_status()
+        payload = response.json()
+    except Exception:
+        return []
+    return [m.get("name", "") for m in payload.get("models", []) if m.get("name")]
+
+
+def verify_model_routing(available_models: list[str] | None = None, http_get=None) -> dict[str, bool]:
+    """Check each routed model in AGENT_MODEL_ROUTES against what's actually
+    pulled locally. Returns {model_name: is_available}. Does not mutate routing
+    or silently substitute a model — callers/humans decide what to do with a
+    missing model (see docs/STARTING_PROMPTS.md Sprint 3: stop and ask)."""
+    available = available_models if available_models is not None else list_local_models(http_get=http_get)
+    routed_models = {route.model for route in AGENT_MODEL_ROUTES.values()}
+    return {model: model in available for model in routed_models}
