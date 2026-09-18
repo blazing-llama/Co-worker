@@ -31,6 +31,10 @@ dependencies = [
 
     # --- Evals / diagnostics (confirmed installable; imports as strands_evals) ---
     "strands-agents-evals>=0.1",
+
+    # --- Frontend API server (src/server.py, serves src/ui/) ---
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
 ]
 
 [project.optional-dependencies]

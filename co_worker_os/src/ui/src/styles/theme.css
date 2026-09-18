@@ -1,0 +1,76 @@
+/*
+ * Dual-theme design tokens — "Quiet Power" (brutalist-luxury).
+ * Dark mode ("Midnight Command Canvas") is the default; light mode
+ * ("Pearl Studio") activates via [data-theme="light"] on <html>.
+ */
+
+:root,
+:root[data-theme='dark'] {
+  /* Canvas / surfaces */
+  --canvas: #0b1020;
+  --surface: #161d2c;
+  --surface-hover: #1e293b;
+  --border-hairline: rgba(255, 255, 255, 0.06);
+  --card-shadow: none;
+
+  /* Text */
+  --text-primary: #dae2fd;
+  --text-secondary: #8b93a7;
+  --text-muted: #64748b;
+
+  /* Verdict tokens */
+  --verdict-viable: #10b981;
+  --verdict-viable-glow: rgba(16, 185, 129, 0.12);
+  --verdict-pivot: #f59e0b;
+  --verdict-pivot-glow: rgba(245, 158, 11, 0.12);
+  --verdict-unviable: #ef4444;
+  --verdict-unviable-glow: rgba(239, 68, 68, 0.12);
+
+  /* Departmental tokens */
+  --dept-pm: #6366f1;
+  --dept-eng: #22c55e;
+  --dept-gtm: #06b6d4;
+  --dept-legal: #f97316;
+  --dept-legal-warning: #ff5c1a;
+}
+
+:root[data-theme='light'] {
+  --canvas: #f7f8fa;
+  --surface: #ffffff;
+  --surface-hover: #f1f3f6;
+  --border-hairline: #e8eaf0;
+  --card-shadow: 0 10px 30px -3px rgba(0, 0, 0, 0.05);
+
+  --text-primary: #14181f;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+
+  /* Verdict + departmental tokens are shared across themes per spec. */
+  --verdict-viable: #10b981;
+  --verdict-viable-glow: rgba(16, 185, 129, 0.12);
+  --verdict-pivot: #f59e0b;
+  --verdict-pivot-glow: rgba(245, 158, 11, 0.12);
+  --verdict-unviable: #ef4444;
+  --verdict-unviable-glow: rgba(239, 68, 68, 0.12);
+
+  --dept-pm: #6366f1;
+  --dept-eng: #22c55e;
+  --dept-gtm: #06b6d4;
+  --dept-legal: #f97316;
+  --dept-legal-warning: #ff5c1a;
+}
+
+/* Respect system preference only when the user hasn't made an explicit
+   choice (App.tsx persists the explicit choice via data-theme). */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --canvas: #f7f8fa;
+    --surface: #ffffff;
+    --surface-hover: #f1f3f6;
+    --border-hairline: #e8eaf0;
+    --card-shadow: 0 10px 30px -3px rgba(0, 0, 0, 0.05);
+    --text-primary: #14181f;
+    --text-secondary: #6b7280;
+    --text-muted: #9ca3af;
+  }
+}
