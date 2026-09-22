@@ -24,6 +24,7 @@ dependencies = [
     "beautifulsoup4>=4.12",
     "duckduckgo-search>=6.2",
     "feedparser>=6.0",  # Reddit RSS / forum feeds
+    "pytrends>=4.9",  # Google Trends, unofficial public endpoint, no API key
 
     # --- Testing ---
     "pytest>=8.2",

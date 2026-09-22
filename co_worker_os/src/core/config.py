@@ -21,6 +21,13 @@ EMBED_MODEL = os.environ.get("CO_WORKER_EMBED_MODEL", "nomic-embed-text")
 MAX_AGENT_LOOP_ITERATIONS = 5
 MAX_REPAIR_LOOP_ITERATIONS = 3
 
+# Quick mode (default ON): route every agent to the small, fast FAST_MODEL
+# instead of the 32b/14b heavy models. The heavy models are large enough that
+# on modest local hardware a single call can take an hour or more -- quick
+# mode trades some answer depth for actually getting a response. Set
+# CO_WORKER_QUICK_MODE=0 to go back to full heavy-model routing.
+QUICK_MODE = os.environ.get("CO_WORKER_QUICK_MODE", "1").lower() not in ("0", "false")
+
 # Sprint 7: worker agents used to dispatch fully in parallel (one thread per
 # agent), which thrashes VRAM on a single 32b model shared across all 5
 # concurrent calls. Bounded concurrency trades some wall-clock time for a
@@ -65,8 +72,16 @@ def model_for(task: str) -> str:
     """Return the local model name routed for a given task class.
 
     Raises KeyError for an unregistered task rather than silently falling back
-    to a default model — routing must be explicit.
+    to a default model -- routing must be explicit.
+
+    In QUICK_MODE (the default -- see above), every task is routed to
+    FAST_MODEL instead of AGENT_MODEL_ROUTES's registered heavy/code model.
+    AGENT_MODEL_ROUTES itself is left untouched so verify_model_routing still
+    reports on the full heavy/code models this system can use, regardless of
+    which one is actively selected for a given run.
     """
+    if QUICK_MODE:
+        return FAST_MODEL
     return AGENT_MODEL_ROUTES[task].model
 
 

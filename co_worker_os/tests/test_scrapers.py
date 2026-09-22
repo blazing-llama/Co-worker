@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 
 from src.scrapers.social_scraper import fetch_reddit_feed
+from src.scrapers.trends_scraper import fetch_trends_summary
 from src.scrapers.video_scraper import extract_transcript
 from src.scrapers.web_scraper import scrape_url, scrape_with_bs4
 
@@ -186,3 +187,94 @@ class TestSocialScraper:
 
         with pytest.raises(ValueError):
             fetch_reddit_feed("https://www.reddit.com/r/empty/.rss", http_get=fake_get)
+
+
+# --- Google Trends scraper -------------------------------------------------
+
+
+class FakeRow(dict):
+    """dict that also supports attribute-free ['col'] access exactly like a
+    pandas Series/row -- enough of the interface trends_scraper.py touches."""
+
+
+class FakeFrame:
+    """Minimal stand-in for a pandas.DataFrame covering only what
+    trends_scraper.py uses: .empty, .iloc[-1], .head(n), .iterrows()."""
+
+    def __init__(self, rows: list[dict]):
+        self._rows = [FakeRow(r) for r in rows]
+
+    @property
+    def empty(self) -> bool:
+        return not self._rows
+
+    @property
+    def iloc(self):
+        return self._rows
+
+    def head(self, n: int) -> "FakeFrame":
+        return FakeFrame(self._rows[:n])
+
+    def iterrows(self):
+        return enumerate(self._rows)
+
+
+class FakeTrendsClient:
+    def __init__(self, interest_rows: list[dict], related: dict):
+        self._interest_rows = interest_rows
+        self._related = related
+        self.built_with: tuple[list[str], str] | None = None
+
+    def build_payload(self, kw_list, timeframe="today 12-m"):
+        self.built_with = (kw_list, timeframe)
+
+    def interest_over_time(self):
+        return FakeFrame(self._interest_rows)
+
+    def related_queries(self):
+        return self._related
+
+
+class TestTrendsScraper:
+    def test_raises_on_empty_keyword_list(self):
+        with pytest.raises(ValueError):
+            fetch_trends_summary([], client=FakeTrendsClient([], {}))
+
+    def test_formats_interest_over_time_and_related_queries(self):
+        client = FakeTrendsClient(
+            interest_rows=[
+                {"local-first notes": 40},
+                {"local-first notes": 72},
+            ],
+            related={
+                "local-first notes": {
+                    "top": FakeFrame(
+                        [
+                            {"query": "offline note app", "value": 100},
+                            {"query": "note app no cloud", "value": 55},
+                        ]
+                    )
+                }
+            },
+        )
+
+        summary = fetch_trends_summary(["local-first notes"], client=client)
+
+        assert client.built_with == (["local-first notes"], "today 12-m")
+        assert "local-first notes: latest relative interest = 72" in summary
+        assert "offline note app" in summary
+        assert "note app no cloud" in summary
+
+    def test_handles_no_interest_data_without_fabricating_a_result(self):
+        client = FakeTrendsClient(interest_rows=[], related={})
+
+        summary = fetch_trends_summary(["a brand new obscure idea"], client=client)
+
+        assert "No interest-over-time data returned" in summary
+
+    def test_truncates_to_googles_five_keyword_limit(self):
+        client = FakeTrendsClient(interest_rows=[{f"kw{i}": 1 for i in range(6)}], related={})
+
+        fetch_trends_summary([f"kw{i}" for i in range(6)], client=client)
+
+        assert len(client.built_with[0]) == 5
