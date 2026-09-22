@@ -100,13 +100,56 @@ def make_worker_chat_fns():
     }
 
 
-class TestRunPipeline:
+class TestRunPipelineDefaultCoreAgents:
+    """Default run_pipeline() call (no agent_names) -- the fast validator +
+    blueprint pair, not the full 5-agent team. See orchestrator.CORE_AGENT_NAMES."""
+
+    def test_default_run_only_dispatches_cofounder_and_product_manager(self):
+        result = cli.run_pipeline(
+            "I want a local-first note app for founders.",
+            parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
+            chat_fns=make_worker_chat_fns(),
+            review_chat_fn=make_rubric_chat_fn(0.9),
+        )
+        assert set(result.outputs.keys()) == {"cofounder", "product_manager"}
+        assert result.reports["cofounder"].passed is True
+        assert result.reports["product_manager"].passed is True
+
+    def test_default_formatted_output_has_no_engineer_gtm_legal_sections(self):
+        result = cli.run_pipeline(
+            "I want a local-first note app for founders.",
+            parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
+            chat_fns=make_worker_chat_fns(),
+            review_chat_fn=make_rubric_chat_fn(0.9),
+        )
+        assert "Co-Founder" in result.formatted_output
+        assert "Product" in result.formatted_output
+        for heading in ["Engineer", "GTM", "Legal"]:
+            assert heading not in result.formatted_output
+
+    def test_default_run_ignores_checkpoint_fn_since_legal_finance_did_not_run(self):
+        # checkpoint_fn exists only to gate legal_finance's release -- with no
+        # legal_finance in this run, denying it must not block anything.
+        result = cli.run_pipeline(
+            "I want a local-first note app for founders.",
+            parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
+            chat_fns=make_worker_chat_fns(),
+            review_chat_fn=make_rubric_chat_fn(0.9),
+            checkpoint_fn=lambda constraints, lf_result: False,
+        )
+        assert set(result.outputs.keys()) == {"cofounder", "product_manager"}
+
+
+class TestRunPipelineDeepAgents:
+    """agent_names=orchestrator.WORKER_AGENT_NAMES -- the full 5-agent team."""
+
     def test_runs_end_to_end_and_returns_all_five_outputs(self):
         result = cli.run_pipeline(
             "I want a local-first note app for founders.",
             parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
             chat_fns=make_worker_chat_fns(),
             review_chat_fn=make_rubric_chat_fn(0.9),
+            agent_names=orchestrator.WORKER_AGENT_NAMES,
         )
         assert set(result.outputs.keys()) == set(orchestrator.WORKER_AGENT_NAMES)
         for name in orchestrator.WORKER_AGENT_NAMES:
@@ -118,6 +161,7 @@ class TestRunPipeline:
             parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
             chat_fns=make_worker_chat_fns(),
             review_chat_fn=make_rubric_chat_fn(0.9),
+            agent_names=orchestrator.WORKER_AGENT_NAMES,
         )
         for heading in ["Co-Founder", "Product", "Engineer", "GTM", "Legal"]:
             assert heading in result.formatted_output
@@ -130,6 +174,7 @@ class TestRunPipeline:
             chat_fns=make_worker_chat_fns(),
             review_chat_fn=make_rubric_chat_fn(0.9),
             context_manager=cm,
+            agent_names=orchestrator.WORKER_AGENT_NAMES,
         )
         labels = [e.label for e in cm.entries]
         assert "user_prompt" in labels
@@ -144,6 +189,7 @@ class TestRunPipeline:
                 chat_fns=make_worker_chat_fns(),
                 review_chat_fn=make_rubric_chat_fn(0.9),
                 checkpoint_fn=lambda constraints, lf_result: False,
+                agent_names=orchestrator.WORKER_AGENT_NAMES,
             )
 
     def test_raises_repair_loop_exhausted_when_review_never_passes(self):
@@ -155,6 +201,7 @@ class TestRunPipeline:
                 parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
                 chat_fns=make_worker_chat_fns(),
                 review_chat_fn=make_rubric_chat_fn(0.1),  # always fails rubric
+                agent_names=orchestrator.WORKER_AGENT_NAMES,
             )
 
     def test_captures_call_records_for_every_real_chat_fn_call(self):
@@ -163,6 +210,7 @@ class TestRunPipeline:
             parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
             chat_fns=make_worker_chat_fns(),
             review_chat_fn=make_rubric_chat_fn(0.9),
+            agent_names=orchestrator.WORKER_AGENT_NAMES,
         )
         agent_role_pairs = {(r.agent_name.split(":")[0], r.agent_name.split(":")[1]) for r in result.call_records}
         # 1 orchestrator parse call + (1 generate + 1 review) per worker agent.
@@ -178,6 +226,7 @@ class TestRunPipeline:
             parse_chat_fn=make_fake_chat_fn(RAW_ORCHESTRATOR_PARSE),
             chat_fns=make_worker_chat_fns(),
             review_chat_fn=make_rubric_chat_fn(0.9),
+            agent_names=orchestrator.WORKER_AGENT_NAMES,
         )
         cofounder_call = next(r for r in result.call_records if r.agent_name == "cofounder:generate")
         assert cofounder_call.response == RAW_COFOUNDER
@@ -191,6 +240,7 @@ class TestRunPipeline:
             chat_fns=make_worker_chat_fns(),
             review_chat_fn=make_rubric_chat_fn(0.9),
             on_event=lambda t, d: events.append((t, d)),
+            agent_names=orchestrator.WORKER_AGENT_NAMES,
         )
         event_types = [t for t, _ in events]
         assert event_types[0] == "run_start"
@@ -216,6 +266,7 @@ class TestRunPipeline:
                 chat_fns=make_worker_chat_fns(),
                 review_chat_fn=make_rubric_chat_fn(0.1),
                 on_event=lambda t, d: events.append((t, d)),
+                agent_names=orchestrator.WORKER_AGENT_NAMES,
             )
         assert any(t == "agent_failed" for t, _ in events)
 
@@ -229,6 +280,7 @@ class TestRunPipeline:
                 review_chat_fn=make_rubric_chat_fn(0.9),
                 checkpoint_fn=lambda constraints, lf_result: False,
                 on_event=lambda t, d: events.append((t, d)),
+                agent_names=orchestrator.WORKER_AGENT_NAMES,
             )
         event_types = [t for t, _ in events]
         assert "checkpoint_pending" in event_types
@@ -247,6 +299,7 @@ class TestRunPipeline:
             chat_fns=make_worker_chat_fns(),
             review_chat_fn=make_rubric_chat_fn(0.9),
             on_event=exploding_callback,
+            agent_names=orchestrator.WORKER_AGENT_NAMES,
         )
         assert set(result.outputs.keys()) == set(orchestrator.WORKER_AGENT_NAMES)
 

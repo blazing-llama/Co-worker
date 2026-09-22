@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from src.agents.orchestrator import LegalFinanceCheckpointBlocked
+from src.agents.orchestrator import WORKER_AGENT_NAMES, LegalFinanceCheckpointBlocked
 from src.cli import PipelineResult, run_pipeline
 from src.core.config import HEAVY_MODEL, OLLAMA_BASE_URL, list_local_models, verify_model_routing
 from src.core.ollama_client import MalformedAgentOutput, ModelUnavailableError
@@ -57,6 +57,8 @@ class RunTeamRequest(BaseModel):
     prompt: str
     category: str | None = None  # "Digital" / "Physical/Food" / "D2C" / "B2B SaaS" -- UI-only, informational
     region: Literal["india", "global"] | None = None
+    deep: bool = False  # False (default): fast Co-Founder + PM validator/blueprint only.
+    # True: full 5-agent team (adds Engineer, GTM & Research, Legal/Finance).
 
 
 class CallRecordOut(BaseModel):
@@ -150,8 +152,10 @@ def run_team(request: RunTeamRequest) -> RunTeamResponse:
     run_id = str(uuid.uuid4())
     prompt = _region_prefixed_prompt(request.prompt, request.region)
 
+    agent_names = WORKER_AGENT_NAMES if request.deep else None
+
     try:
-        result = run_pipeline(prompt, checkpoint_fn=lambda constraints, lf_result: True)
+        result = run_pipeline(prompt, checkpoint_fn=lambda constraints, lf_result: True, agent_names=agent_names)
     except ModelUnavailableError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except MalformedAgentOutput as exc:
@@ -175,7 +179,12 @@ _STREAM_DONE = object()
 
 
 @app.get("/api/run-team/stream")
-def run_team_stream(prompt: str, category: str | None = None, region: Literal["india", "global"] | None = None):
+def run_team_stream(
+    prompt: str,
+    category: str | None = None,
+    region: Literal["india", "global"] | None = None,
+    deep: bool = False,
+):
     """Server-Sent Events version of /api/run-team: emits a live event per
     pipeline milestone (chat_call_start/end, agent_start/done, checkpoint_*,
     run_done/run_error) as the real pipeline executes, ending with a "result"
@@ -189,6 +198,7 @@ def run_team_stream(prompt: str, category: str | None = None, region: Literal["i
     """
     run_id = str(uuid.uuid4())
     full_prompt = _region_prefixed_prompt(prompt, region)
+    agent_names = WORKER_AGENT_NAMES if deep else None
     event_queue: queue.Queue = queue.Queue()
 
     def on_event(event_type: str, data: dict) -> None:
@@ -196,7 +206,9 @@ def run_team_stream(prompt: str, category: str | None = None, region: Literal["i
 
     def worker() -> None:
         try:
-            result = run_pipeline(full_prompt, checkpoint_fn=lambda c, lf: True, on_event=on_event)
+            result = run_pipeline(
+                full_prompt, checkpoint_fn=lambda c, lf: True, on_event=on_event, agent_names=agent_names
+            )
         except ModelUnavailableError as exc:
             event_queue.put(("run_error", {"reason": "model_unavailable", "detail": str(exc)}))
         except MalformedAgentOutput as exc:

@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from src.agents import orchestrator
+from src.core.config import MAX_CONCURRENT_AGENTS
 from src.core.context_manager import ContextManager
 from src.core.ollama_client import ChatFn, MalformedAgentOutput, ModelUnavailableError
 from src.core.schemas import ProductConstraints, ReviewReport
@@ -113,6 +114,7 @@ def run_pipeline(
     context_manager: ContextManager | None = None,
     max_repair_iterations: int = 3,
     on_event: RunEventFn | None = None,
+    agent_names: tuple[str, ...] | None = None,
 ) -> PipelineResult:
     """Run the full local pipeline for one natural-language idea prompt.
 
@@ -122,6 +124,13 @@ def run_pipeline(
     gets repaired within `max_repair_iterations` or `RepairLoopExhausted`
     propagates to the caller.
 
+    `agent_names`, if given, selects which worker agents to run -- omit it
+    (or pass None) for the default fast validator + blueprint pair
+    (orchestrator.CORE_AGENT_NAMES: cofounder + product_manager), or pass
+    orchestrator.WORKER_AGENT_NAMES for the full 5-agent "deep" run
+    (adds Engineer/GTM/Legal-Finance). The legal_finance human checkpoint
+    (`checkpoint_fn`) only applies when legal_finance is actually in the run.
+
     `on_event`, if given, is called synchronously at each milestone
     (run_start, parse_start/done, agent_start/chat_call_start/
     chat_call_end/repair_review/agent_done, checkpoint_*, run_done/run_error)
@@ -130,6 +139,7 @@ def run_pipeline(
     chat_fns = chat_fns or {}
     context_manager = context_manager or ContextManager()
     call_records: list[AgentCallRecord] = []
+    names_to_run: tuple[str, ...] = tuple(agent_names) if agent_names else orchestrator.CORE_AGENT_NAMES
 
     _emit(on_event, "run_start", prompt=raw_prompt)
 
@@ -205,7 +215,7 @@ def run_pipeline(
             on_event,
             call_records,
         )
-        for name in orchestrator.WORKER_AGENT_NAMES
+        for name in names_to_run
     }
 
     def _repair_one(name: str):
@@ -237,15 +247,15 @@ def run_pipeline(
     reports: dict[str, ReviewReport] = {}
     iterations: dict[str, int] = {}
 
-    with ThreadPoolExecutor(max_workers=len(orchestrator.WORKER_AGENT_NAMES)) as executor:
-        futures = [executor.submit(_repair_one, name) for name in orchestrator.WORKER_AGENT_NAMES]
+    with ThreadPoolExecutor(max_workers=min(len(names_to_run), MAX_CONCURRENT_AGENTS)) as executor:
+        futures = [executor.submit(_repair_one, name) for name in names_to_run]
         for future in futures:
             name, output, report, iters = future.result()
             outputs[name] = output
             reports[name] = report
             iterations[name] = iters
 
-    if checkpoint_fn is not None:
+    if checkpoint_fn is not None and "legal_finance" in outputs:
         _emit(on_event, "checkpoint_pending", agent="legal_finance")
         approved = checkpoint_fn(constraints, outputs["legal_finance"])
         _emit(on_event, "checkpoint_result", agent="legal_finance", approved=approved)
@@ -294,6 +304,12 @@ def main(argv: list[str] | None = None) -> int:
         prog="co-worker", description="100% local, zero-subscription multi-agent co-worker."
     )
     parser.add_argument("idea", help="A natural-language product idea, in quotes.")
+    parser.add_argument(
+        "--deep",
+        action="store_true",
+        help="Run the full 5-agent team (adds Engineer, GTM & Research, Legal/Finance) instead of the "
+        "default fast Co-Founder + Product Manager validator/blueprint pair.",
+    )
     args = parser.parse_args(argv)
 
     def _confirm_legal_finance(constraints: ProductConstraints, legal_finance_result) -> bool:
@@ -302,8 +318,10 @@ def main(argv: list[str] | None = None) -> int:
         answer = input("Release this Legal/Finance output? [y/N] ").strip().lower()
         return answer == "y"
 
+    agent_names = orchestrator.WORKER_AGENT_NAMES if args.deep else None
+
     try:
-        result = run_pipeline(args.idea, checkpoint_fn=_confirm_legal_finance)
+        result = run_pipeline(args.idea, checkpoint_fn=_confirm_legal_finance, agent_names=agent_names)
     except orchestrator.LegalFinanceCheckpointBlocked:
         print("Run stopped: Legal/Finance output was not approved for release.", file=sys.stderr)
         return 1

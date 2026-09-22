@@ -27,6 +27,14 @@ WORKER_AGENT_NAMES: tuple[str, ...] = (
     "legal_finance",
 )
 
+# Default agent set for a run: a fast, self-contained validator (Co-Founder's
+# viability verdict) + blueprint (PM's PRD) -- works for either a startup
+# idea or a plain business idea, and is the pair least likely to exhaust the
+# repair loop on a small local model. Engineer/GTM/Legal-Finance go deeper
+# but are opt-in (see cli.run_pipeline's agent_names param / server.py's
+# `deep` request flag) rather than run by default.
+CORE_AGENT_NAMES: tuple[str, ...] = ("cofounder", "product_manager")
+
 _WORKER_RUN_FNS: dict[str, Callable] = {
     "cofounder": cofounder.run,
     "product_manager": product_manager.run,
