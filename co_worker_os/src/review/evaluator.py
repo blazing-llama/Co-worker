@@ -41,8 +41,14 @@ agent's name, its output (as JSON), and the ProductConstraints it was asked to
 satisfy, score how well the output is: (1) grounded in the given constraints
 and any supplied scraped context, not invented; (2) consistent with the stated
 budget, timeline, region, and tech constraints; (3) qualitatively complete for
-its role. Return ONLY a JSON object: {"score": <float 0.0-1.0>, "notes":
-"<one paragraph explaining the score, calling out anything ungrounded>"}.
+its role; (4) SPECIFIC, not vague filler -- if the constraints include concrete
+numbers (a cost, price, rate, quantity), any economics/summary text claiming
+to use them must show the actual calculation, not just gesture at "using the
+given budget/timeline"; (5) free of leaked raw field names (e.g. the literal
+text "machine_cost" or "tech_constraints" appearing as a word in prose instead
+of a natural English phrase) -- that is always a real defect, penalize it.
+Return ONLY a JSON object: {"score": <float 0.0-1.0>, "notes":
+"<one paragraph explaining the score, calling out anything ungrounded, vague, or containing a leaked field name>"}.
 Return raw JSON only, no prose, no markdown fences.
 """
 

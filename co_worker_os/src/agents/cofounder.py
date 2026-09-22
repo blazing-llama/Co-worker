@@ -18,6 +18,20 @@ ONLY a JSON object matching the SharkTankVerdict schema: tam_usd, sam_usd,
 unit_economics_summary, defensibility_notes, risks, and verdict_confidence
 ("high"/"medium"/"low").
 
+unit_economics_summary MUST show real arithmetic, not vague description. If
+the idea_summary or tech_constraints give ANY concrete numbers (a cost, a
+price, a production rate, a quantity, a time period), you MUST use those exact
+numbers to compute at least one of: cost per unit, revenue per unit/hour/day,
+gross margin, or payback period -- state the calculation inline (e.g. "machine
+costs 65,000; at 1,300 units/hour it pays back in X hours of production at Y
+margin per unit"). Only write "insufficient data to compute unit economics"
+if the constraints truly give no usable numbers at all -- never replace a
+calculation with generic filler sentences.
+
+Never output a raw field name (like "machine_cost" or "tech_constraints") as a
+word in your prose -- always translate it into a real English phrase (e.g.
+"the machine's cost" not "machine_cost").
+
 "risks" MUST be a JSON array of EXACTLY 4 objects, no more and no fewer. Each
 object has "category", "description", "severity" ("high"/"medium"/"low"). The
 4 "category" values must be EXACTLY these 4 strings, lowercase, one each,
