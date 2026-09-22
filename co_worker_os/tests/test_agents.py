@@ -323,3 +323,23 @@ class TestModelRoutingVerification:
             raise ConnectionError("no ollama here")
 
         assert list_local_models(http_get=failing_get) == []
+
+
+class TestQuickModeRouting:
+    """model_for() is the only place agents (and orchestrator.dispatch, via
+    each agent's default_chat_fn(model_for(...))) get their model name from.
+    QUICK_MODE is env-driven and read at import time, so these tests exercise
+    the underlying logic directly rather than reimporting the module."""
+
+    def test_orchestrator_parse_always_uses_fast_model_regardless_of_quick_mode(self):
+        from src.core import config
+
+        assert config.model_for("orchestrator_parse") == config.FAST_MODEL
+
+    def test_quick_mode_routes_reasoning_agents_to_quick_heavy_model_not_fast_model(self):
+        from src.core import config
+
+        if config.QUICK_MODE:
+            for task in ("cofounder", "product_manager", "engineer", "gtm_ops", "legal_finance", "review_rubric"):
+                assert config.model_for(task) == config.QUICK_HEAVY_MODEL
+                assert config.model_for(task) != config.FAST_MODEL

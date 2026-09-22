@@ -21,12 +21,23 @@ EMBED_MODEL = os.environ.get("CO_WORKER_EMBED_MODEL", "nomic-embed-text")
 MAX_AGENT_LOOP_ITERATIONS = 5
 MAX_REPAIR_LOOP_ITERATIONS = 3
 
-# Quick mode (default ON): route every agent to the small, fast FAST_MODEL
-# instead of the 32b/14b heavy models. The heavy models are large enough that
-# on modest local hardware a single call can take an hour or more -- quick
-# mode trades some answer depth for actually getting a response. Set
-# CO_WORKER_QUICK_MODE=0 to go back to full heavy-model routing.
+# Quick mode (default ON): route reasoning agents (cofounder, product_manager,
+# engineer, gtm_ops, legal_finance, review_rubric) to QUICK_HEAVY_MODEL instead
+# of the 32b/14b heavy models, which are large enough that a single call can
+# take an hour or more on modest local hardware. QUICK_HEAVY_MODEL trades some
+# answer depth for actually getting a response in a reasonable time.
+#
+# orchestrator_parse is NOT affected by this -- it already always used
+# FAST_MODEL (llama3.2:3b), per CLAUDE.md's Model Routing section, and that
+# step works fine at that size (it's a simple extraction, not open reasoning).
+# FAST_MODEL is deliberately NOT reused as QUICK_HEAVY_MODEL: 3B is too small
+# to reliably produce the structured, multi-field outputs (e.g. cofounder's
+# SharkTankVerdict) the review gate checks, and fails review within the
+# 3-iteration repair cap instead of ever returning a result.
+#
+# Set CO_WORKER_QUICK_MODE=0 to go back to full heavy-model routing.
 QUICK_MODE = os.environ.get("CO_WORKER_QUICK_MODE", "1").lower() not in ("0", "false")
+QUICK_HEAVY_MODEL = os.environ.get("CO_WORKER_QUICK_HEAVY_MODEL", "llama3.1:latest")
 
 # Sprint 7: worker agents used to dispatch fully in parallel (one thread per
 # agent), which thrashes VRAM on a single 32b model shared across all 5
@@ -74,14 +85,15 @@ def model_for(task: str) -> str:
     Raises KeyError for an unregistered task rather than silently falling back
     to a default model -- routing must be explicit.
 
-    In QUICK_MODE (the default -- see above), every task is routed to
-    FAST_MODEL instead of AGENT_MODEL_ROUTES's registered heavy/code model.
-    AGENT_MODEL_ROUTES itself is left untouched so verify_model_routing still
-    reports on the full heavy/code models this system can use, regardless of
-    which one is actively selected for a given run.
+    In QUICK_MODE (the default -- see above), orchestrator_parse still uses
+    FAST_MODEL (its original routing) and every other task is routed to
+    QUICK_HEAVY_MODEL instead of AGENT_MODEL_ROUTES's registered heavy/code
+    model. AGENT_MODEL_ROUTES itself is left untouched so verify_model_routing
+    still reports on the full heavy/code models this system can use,
+    regardless of which one is actively selected for a given run.
     """
     if QUICK_MODE:
-        return FAST_MODEL
+        return FAST_MODEL if task == "orchestrator_parse" else QUICK_HEAVY_MODEL
     return AGENT_MODEL_ROUTES[task].model
 
 
