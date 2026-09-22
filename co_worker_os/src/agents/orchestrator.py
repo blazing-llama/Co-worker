@@ -49,8 +49,12 @@ natural-language product idea from the user, return ONLY a JSON object matching
 the ProductConstraints schema: idea_summary, target_persona, budget_usd (number,
 0 if unstated), timeline_weeks (integer, 0 if unstated), tech_constraints (list
 of strings, may be empty), and region ("india" or "global", default "india" if
-unstated). Extract only what the user actually said — never invent a budget,
-timeline, or persona the prompt doesn't support. Return raw JSON only, no prose,
+unstated). target_persona is REQUIRED and must NEVER be null: if the prompt
+doesn't name who it's for, write a short reasonable description of the likely
+customer instead (e.g. "general retail customer", "local household buyer") --
+never leave it empty or null. Extract only what the user actually said — never
+invent a budget, timeline, or persona detail the prompt doesn't support.
+Return raw JSON only, no prose,
 no markdown fences.
 """
 

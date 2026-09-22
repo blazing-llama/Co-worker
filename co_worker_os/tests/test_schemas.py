@@ -57,6 +57,18 @@ class TestProductConstraints:
         pc = make_constraints(timeline_weeks=None)
         assert pc.timeline_weeks == 0
 
+    def test_null_target_persona_gets_a_default_instead_of_failing(self):
+        # A prompt with no stated audience (e.g. "papadam business, machine
+        # costs X, budget Y") can make even a well-prompted small model
+        # return null instead of inferring a reasonable persona.
+        pc = make_constraints(target_persona=None)
+        assert pc.target_persona
+        assert isinstance(pc.target_persona, str)
+
+    def test_empty_string_target_persona_also_gets_a_default(self):
+        pc = make_constraints(target_persona="")
+        assert pc.target_persona
+
 
 class TestSharkTankVerdict:
     def _four_risks(self):

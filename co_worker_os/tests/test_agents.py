@@ -122,7 +122,12 @@ class TestOrchestratorParseConstraints:
             orchestrator.parse_constraints("some idea", chat_fn=chat_fn)
 
     def test_raises_malformed_output_on_schema_violation(self):
-        bad_json = json.dumps({"idea_summary": "x"})  # missing required fields
+        # budget_usd/timeline_weeks/target_persona all have graceful defaults
+        # for a null/missing value now (see ProductConstraints._default_
+        # unstated_fields) -- idea_summary does not (nothing sensible to
+        # default a one-paragraph idea restatement to), so it's still a real
+        # schema violation.
+        bad_json = json.dumps({"target_persona": "x", "budget_usd": 0, "timeline_weeks": 0})
         chat_fn = make_fake_chat_fn(bad_json)
         with pytest.raises(MalformedAgentOutput):
             orchestrator.parse_constraints("some idea", chat_fn=chat_fn)

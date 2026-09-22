@@ -41,19 +41,24 @@ class ProductConstraints(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _default_unstated_numbers_to_zero(cls, data):
+    def _default_unstated_fields(cls, data):
         # The orchestrator_parse prompt tells the model to use 0 for an
         # unstated budget/timeline (see orchestrator.PARSE_SYSTEM_PROMPT),
         # but a small/fast model (this step is always routed to FAST_MODEL,
         # see CLAUDE.md's Model Routing section) sometimes emits null
-        # instead of following that instruction. Treat null the same as
-        # "unstated" here rather than failing validation on a wording choice
-        # the prompt already covers semantically.
+        # instead of following that instruction -- or, for target_persona
+        # (no numeric-style "0" fallback makes sense for a string), a prompt
+        # that genuinely never states a persona (e.g. "papadam business,
+        # machine costs X, budget Y") and the model returns null rather than
+        # inferring a reasonable default. Treat null as "unstated" for all
+        # three rather than failing validation and killing the whole run.
         if isinstance(data, dict):
             if data.get("budget_usd") is None:
                 data["budget_usd"] = 0
             if data.get("timeline_weeks") is None:
                 data["timeline_weeks"] = 0
+            if not data.get("target_persona"):
+                data["target_persona"] = "General customer (not specified in prompt)"
         return data
 
 
