@@ -47,6 +47,16 @@ class TestProductConstraints:
         with pytest.raises(ValidationError):
             make_constraints(budget_usd=-1)
 
+    def test_null_budget_defaults_to_zero(self):
+        # A small/fast model (orchestrator_parse is always routed to
+        # FAST_MODEL) may emit null instead of 0 for an unstated budget.
+        pc = make_constraints(budget_usd=None)
+        assert pc.budget_usd == 0
+
+    def test_null_timeline_weeks_defaults_to_zero(self):
+        pc = make_constraints(timeline_weeks=None)
+        assert pc.timeline_weeks == 0
+
 
 class TestSharkTankVerdict:
     def _four_risks(self):

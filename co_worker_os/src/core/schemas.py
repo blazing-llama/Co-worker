@@ -39,6 +39,23 @@ class ProductConstraints(BaseModel):
     tech_constraints: list[str] = Field(default_factory=list)
     region: Region = Region.INDIA
 
+    @model_validator(mode="before")
+    @classmethod
+    def _default_unstated_numbers_to_zero(cls, data):
+        # The orchestrator_parse prompt tells the model to use 0 for an
+        # unstated budget/timeline (see orchestrator.PARSE_SYSTEM_PROMPT),
+        # but a small/fast model (this step is always routed to FAST_MODEL,
+        # see CLAUDE.md's Model Routing section) sometimes emits null
+        # instead of following that instruction. Treat null the same as
+        # "unstated" here rather than failing validation on a wording choice
+        # the prompt already covers semantically.
+        if isinstance(data, dict):
+            if data.get("budget_usd") is None:
+                data["budget_usd"] = 0
+            if data.get("timeline_weeks") is None:
+                data["timeline_weeks"] = 0
+        return data
+
 
 class ProductRisk(BaseModel):
     model_config = {"frozen": True}
