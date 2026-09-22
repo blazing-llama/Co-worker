@@ -65,6 +65,28 @@ class ProductRisk(BaseModel):
     severity: ConfidenceLevel
 
 
+# Smaller local models (see CO_WORKER_QUICK_HEAVY_MODEL) reliably produce the
+# right 4 risk topics but not always the exact required category string --
+# SharkTankVerdict normalizes these known synonyms (plus whitespace/case)
+# before its strict "covers exactly these 4 categories" check, rather than
+# failing a correct-in-substance answer on wording.
+_RISK_CATEGORY_SYNONYMS = {
+    "value": "value",
+    "value proposition": "value",
+    "customer value": "value",
+    "usability": "usability",
+    "ux": "usability",
+    "user experience": "usability",
+    "feasibility": "feasibility",
+    "technical feasibility": "feasibility",
+    "engineering feasibility": "feasibility",
+    "viability": "viability",
+    "market viability": "viability",
+    "business viability": "viability",
+    "financial viability": "viability",
+}
+
+
 class SharkTankVerdict(BaseModel):
     """Co-Founder agent output: Shark Tank-style viability assessment."""
 
@@ -76,6 +98,18 @@ class SharkTankVerdict(BaseModel):
     defensibility_notes: str
     risks: list[ProductRisk] = Field(..., min_length=4, max_length=4, description="Exactly 4 risks: value, usability, feasibility, viability.")
     verdict_confidence: ConfidenceLevel
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_risk_categories(cls, data):
+        if isinstance(data, dict):
+            risks = data.get("risks")
+            if isinstance(risks, list):
+                for risk in risks:
+                    if isinstance(risk, dict) and isinstance(risk.get("category"), str):
+                        key = risk["category"].strip().lower()
+                        risk["category"] = _RISK_CATEGORY_SYNONYMS.get(key, key)
+        return data
 
     @model_validator(mode="after")
     def _sam_not_greater_than_tam(self) -> "SharkTankVerdict":

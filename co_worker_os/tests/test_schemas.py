@@ -89,6 +89,45 @@ class TestSharkTankVerdict:
                 verdict_confidence=ConfidenceLevel.LOW,
             )
 
+    def test_normalizes_category_whitespace_and_case_from_raw_json(self):
+        # SharkTankVerdict.model_validate (the path real LLM JSON output goes
+        # through) sees raw dicts, not ProductRisk instances -- this is the
+        # shape a weaker local model actually produces.
+        verdict = SharkTankVerdict.model_validate(
+            {
+                "tam_usd": 100,
+                "sam_usd": 50,
+                "unit_economics_summary": "x",
+                "defensibility_notes": "x",
+                "risks": [
+                    {"category": " Value ", "description": "d", "severity": "medium"},
+                    {"category": "USABILITY", "description": "d", "severity": "low"},
+                    {"category": "feasibility", "description": "d", "severity": "high"},
+                    {"category": "viability", "description": "d", "severity": "medium"},
+                ],
+                "verdict_confidence": "medium",
+            }
+        )
+        assert {r.category for r in verdict.risks} == {"value", "usability", "feasibility", "viability"}
+
+    def test_normalizes_known_category_synonyms_from_raw_json(self):
+        verdict = SharkTankVerdict.model_validate(
+            {
+                "tam_usd": 100,
+                "sam_usd": 50,
+                "unit_economics_summary": "x",
+                "defensibility_notes": "x",
+                "risks": [
+                    {"category": "value proposition", "description": "d", "severity": "medium"},
+                    {"category": "user experience", "description": "d", "severity": "low"},
+                    {"category": "technical feasibility", "description": "d", "severity": "high"},
+                    {"category": "market viability", "description": "d", "severity": "medium"},
+                ],
+                "verdict_confidence": "medium",
+            }
+        )
+        assert {r.category for r in verdict.risks} == {"value", "usability", "feasibility", "viability"}
+
     def test_rejects_missing_risk_category(self):
         risks = self._four_risks()[:3]  # drop viability
         risks.append(ProductRisk(category="value", description="dup", severity=ConfidenceLevel.LOW))
