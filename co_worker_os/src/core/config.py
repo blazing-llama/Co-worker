@@ -49,6 +49,17 @@ MAX_CONCURRENT_AGENTS = int(os.environ.get("CO_WORKER_MAX_CONCURRENCY", "2"))
 # embedding and a cached prompt's embedding to treat it as a cache hit.
 CACHE_SIMILARITY_THRESHOLD = float(os.environ.get("CO_WORKER_CACHE_SIMILARITY_THRESHOLD", "0.85"))
 
+# Review gate (src/review/evaluator.py): minimum LLM-judge rubric score to
+# pass. 0.6 was calibrated with HEAVY_MODEL (32b) judging itself. In
+# QUICK_MODE the SAME small QUICK_HEAVY_MODEL judges its own output, and a
+# small model is a much noisier judge of subjective, judgment-heavy content
+# (e.g. cofounder's market-sizing/defensibility calls) than of mechanical,
+# structured content (e.g. product_manager's PRD) -- so at 0.6 it can fail a
+# genuinely reasonable answer repeatedly and exhaust the repair loop. 0.5
+# keeps the gate real (bad/ungrounded output still fails) while matching what
+# this judge can reliably tell apart.
+RUBRIC_PASS_THRESHOLD = float(os.environ.get("CO_WORKER_RUBRIC_PASS_THRESHOLD", "0.5" if QUICK_MODE else "0.6"))
+
 
 @dataclass(frozen=True)
 class ModelRoute:

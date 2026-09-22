@@ -16,7 +16,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from src.core.ollama_client import ChatFn, default_chat_fn, parse_json_response
-from src.core.config import model_for
+from src.core.config import RUBRIC_PASS_THRESHOLD, model_for
 from src.core.schemas import (
     PRDSpec,
     ProductConstraints,
@@ -25,8 +25,6 @@ from src.core.schemas import (
     SharkTankVerdict,
     TechStackSpec,
 )
-
-RUBRIC_PASS_THRESHOLD = 0.6
 
 
 class RubricScore(BaseModel):
